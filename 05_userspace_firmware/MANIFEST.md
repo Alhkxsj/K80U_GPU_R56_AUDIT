@@ -151,7 +151,7 @@
 | `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵；**§3.7.4 已于 v1.7 改写** |
 | **`09`** | ✅ | — | **新增**：Stage 4 收尾核验（四处更正 + 阻断清单 + 最终裁定 B） |
 
-> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项 UNKNOWN 中 **5 项闭合、5 项部分闭合**，P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
+> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 5 / PARTIAL 6 / BLOCKED 1 / OPEN 15**（五态，见 §6.1），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
 ### 3.3 来源归属状态（A / B / C）
 
@@ -369,17 +369,17 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项，闭合 5 项，部分闭合 **5** 项）
+### 6.1 UNKNOWN 汇总（27 项：CLOSED 5 / PARTIAL 6 / BLOCKED 1 / OPEN 15）
 
 | 优先级 | ID | 内容 | 状态 |
 | --- | --- | --- | --- |
 | **P0** | ~~U4-01~~ | 原厂固件 header 实际值 | ✅ **闭合**：`03`/`00` → 0.3（`07` §4.5） |
-| **P0** | U4-04 | DDK 自称 UK ABI / padding 清零 / props 严格校验 | 部分闭合（版本代次 `r49p1-03bet0` 已取；**padding 门槛已定量 15 处**、**props 机制已明**；DDK 行为仍 [U]）；**风险等级已上调**，见 `09` §5 |
-| **P0** | U4-10 | GPU 失败后是否 bootloop | 开放 |
-| **P0** | U4-12 | R56p0 固件是否匹配 G925 MC12 | **阻断**：交付包 23 条目中 0 个固件（商业交付件），见 `09` §6 |
+| **P0** | U4-04 | DDK 自称 UK ABI / padding 清零 / props 严格校验 | ⚠️ **PARTIAL（a✅ b✅ c❌）**：a 版本代次 `r49p1-03bet0`；b **结构体布局差异已闭合**（51 个共同结构体、实质差异 0，`09` §11.1）；c DDK 是否清零 padding 仍 [U] |
+| **P0** | U4-10 | GPU 失败后是否 bootloop | ⚠️ **PARTIAL（本轮）**：**静态排除启动阻断**——固件在首次 `open()` 加载，probe 不涉及（`09` §11.3）；剩余为可用性丧失面 |
+| **P0** | U4-12 | R56p0 固件是否匹配 G925 MC12 | ⛔ **BLOCKED**：交付包 23 条目中 0 个固件（商业交付件），见 `09` §6 |
 | P1 | U4-02 | 原厂固件运行时 GLB 版本 | 开放 |
 | P1 | U4-11 | 原厂固件 GLB 尾部版本号 | 开放 |
-| P1 | U4-14 | DDK 是否用被删的 5 个 ioctl | 开放 |
+| P1 | U4-14 | DDK 是否用被删的 ioctl | ○ OPEN（**已精确化**）：R56 删 6 个，含 MTK 私有 **80** 与 **55**（`09` §11.2） |
 | P1 | U4-15 | DDK 对 props 新 ID 的处理 | 开放 |
 | P1 | U4-17 | 薄壳 `api_version` / 加载机制 | 开放 |
 | P1 | **U4-22** | `libged` 失效对 mapper/HWC 的传导 | **新增开放** |
@@ -461,3 +461,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-15 | **v1.5** | **U4-24 采集工具 + 三处口径更正**（`stage4: add GPU module identity audit`）：新增 `tools/collect_gpu_module_identity.sh`（396 行，POSIX sh，只读，无 adb，路径多根搜索，缺工具输出 `NOT_AVAILABLE`）与 `tools/README_gpu_module_identity.md`（199 行）。`08` 新增 **§3.6**（U4-24 判定矩阵、模块集合映射、kCFI/CRC 重导依赖分类、子项 a/b 拆分）；修正三处口径：①`lsmod` size 是 `core_layout.size` 非文件大小（取消"差 409 KB"的相减表述）②设备多出 `mtk_ghpm`，仓库无此文件，集合不对称 ③`met_*`「未装载」受筛选口径限制。**计数不变（27/5/3/3），U4-24 仍未闭合** |
 | 2026-11-16 | **v1.6** | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户执行 `collect_gpu_module_identity.sh` 并回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**（路径/大小/SHA256/vermagic/srcversion/sysfs Build ID），vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；②**发现三层内核版本**：运行 `6.6.143-gf9aa2fec23c3`（第三方）／原厂推定 `6.6.118-g54a15cf3acba`／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）——**此前把 6.6.143 当"设备内核"是错的**；③**14/15 模块字节数与 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**；④~~**发现运行内核绕过 vermagic 校验**~~（**已于 v1.7 撤回**：那是 `CONFIG_MODVERSIONS` 的原生语义）；⑤"`ged` 差 409 KB"**彻底作废**（两侧文件同为 1,093,352 B）；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm`/`mtk_cg_peak_power_throttling`/`mtk_smmu_qos`）；⑦修脚本 v1.1 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**（U4-24 转入部分闭合，P0 不变） |
 | 2026-11-16 | **v1.7** | **Stage 4 收尾核验**（`stage4: close remaining audit items with source-level verification`）：新增 **`09_stage4_closure.md`**（Stage 4 最终裁定 + 四处更正 + 阻断清单）。①**撤回"运行内核绕过 `same_magic()`"**——`CONFIG_MODVERSIONS` 下该函数本就跳过 release 串（v6.6 `version.c:88-96`），装载合法；②**找出真正的开关**：`bypass-kernel` 把 `version.c` 的 `bad_version:` 改 `return 1`，默认关闭，2026-08-29→10-30 门控 `== 'true'`（布尔对字符串）恒失效；U4-25 拆 a/b/c；③**`uname -v` 的日期是补丁月常量**（`${os_patch_level}-05 04:20:00 UTC`），不能作构建时间；④**padding 强制校验实为 15 处**（原写"两处"，只读了 `mali_kbase_ioctl_helpers.h` 前 20 个定义），R-C2 由"tiler 失效"上调为"GPU 不可用"；⑤核 R56 交付包 23 条目 **0 个固件**（U4-12 属商业阻断）；⑥`/proc/modules` taint 仅 `(O)`、无 `F`。**计数 27/5/4/3 → 27/5/5/3**；D-021 改写，新增 D-023/D-024/D-025 |
+| 2026-11-16 | **v1.8** | **Stage 4 全量收尾（TASK-STAGE4-FINAL）**：`09` 追加 **§11**（三条新证据 + 一条自我更正）。①**UAPI 结构体双向全量比对**：51 个共同结构体、实质差异 **0**（`mem_sync` 仅重命名 `handle`→`gpu_va`；CSG 112→120 的扩展被 `_1_35` 变体逐字段迁移吸收）→ **U4-04b 闭合**；②**R56 实际删除 6 个 ioctl**，含 MTK 私有 **80**（`INTERNAL_FENCE_WAIT`，仅超时上报与可选自愈 reset）与 **55**（`SET_LIMITED_CORE_COUNT`）→ U4-14 精确化；③**CSF 固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED**。**计数 27/5/5/3 → 27/5/6/1/15**（五态：CLOSED/PARTIAL/BLOCKED/OPEN/UNKNOWN） |

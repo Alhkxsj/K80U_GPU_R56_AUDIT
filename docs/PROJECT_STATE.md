@@ -6,9 +6,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最后更新 | 2026-11-16 01:10（GMT+8） |
-| 更新提交 | `stage4: close remaining audit items with source-level verification` |
-| 提交前基准 HEAD | `50644e1`（`stage4: close U4-24a with device module identity`） |
+| 最后更新 | 2026-11-16 02:40（GMT+8） |
+| 更新提交 | `stage4: finalize stage 4 with full-state ledger and DDK dual-track assessment` |
+| 提交前基准 HEAD | `f6903ecf790a70239a3833c93556927c8fce31a8`（`stage4: close remaining audit items with source-level verification`） |
 | 分支 | `main` |
 | 精确 SHA 查询 | `git log -1 --format='%H %s'` |
 
@@ -44,7 +44,7 @@
 | Stage 2 | kbase / CSF 差异审计 | ✅ 完成（7 份，45 条差异 / 13 P0） | ✅ |
 | Stage 3 | MTK 平台层审计 | ✅ 完成（7 份，保留 10 / 适配 2 / 重写 0） | ✅ |
 | Stage 3-REA | 二进制逆向补充 | ✅ 完成（8 份，12 个 `.ko` / 5,440 函数） | ⚠️ 数值基线需按 §5.4 重导 |
-| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份，`01`–`09`） | ⚠️ **收尾完成，未闭环**（U4-01、U4-24a、U4-25a 闭合；3 项 P0 开放） |
+| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份 + `06/` 三份收尾台账） | ⚠️ **收尾完成，未闭环**：27 项 = CLOSED 5 / PARTIAL 6 / BLOCKED 1 / OPEN 15；**P0 3 项** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | — |
 
 **"报告已交付"与"证据已闭环"是两种状态，不可互相替代。**
@@ -57,32 +57,36 @@
 
 | 项 | 数量 |
 | --- | --- |
-| UNKNOWN 总数 | **27** |
-| 已闭合 | **5**（U4-01 / U4-03 / U4-05 / U4-08 / U4-09） |
-| 部分闭合 | **5**（U4-04 / U4-06 / U4-07 / U4-24 / **U4-25**） |
+| 总数 | **27** |
+| ✅ CLOSED | **5**（U4-01 / U4-03 / U4-05 / U4-08 / U4-09） |
+| ⚠️ PARTIAL | **6**（U4-04 / U4-06 / U4-07 / **U4-10** / U4-24 / U4-25） |
+| ⛔ BLOCKED | **1**（**U4-12**） |
+| ○ OPEN | **15** |
+| ? UNKNOWN | **0** |
 | **P0** | **3**（U4-04 / U4-10 / U4-12） |
 
-> **本轮变化（2026-11-16 收尾核验）**：部分闭合 4 → 5（U4-25 的 a 子项闭合）；**P0 数量不变，但 U4-04 风险等级上调**（padding 强制校验 15 处，覆盖 CS 主链路，见 §5.4）。**U4-12 性质变更**：不是"没找到固件"，而是"交付包内 0 个固件条目，属商业交付件"——它是**阻断**。
+> **本轮变化（2026-11-16 TASK-STAGE4-FINAL）**：改用**五态**登记。PARTIAL 5 → 6（U4-10 由 OPEN 转入：静态已排除"启动阻断"）；**U4-12 单列 BLOCKED**（此前混在 OPEN 里）；**U4-04 拆为 a/b/c 三子项，其中 b（结构体布局）本轮闭合**，风险由"单点致命"下调为"中"。总数与 P0 数量不变。
 
 ### 3.2 P0 明细
 
 | ID | 内容 | 当前证据 | 闭合方式 |
 | --- | --- | --- | --- |
 | ~~U4-01~~ | ~~原厂 CSF 固件 header 实际字节~~ | ✅ **已闭合 [D·A]**：`6e 3a f1 c3 03 00 00 00` → `offset 4 = 0x03` / `offset 5 = 0x00` → **0.3** | 2026-11-15 23:20 `od` 读数（`05/07` §4.5、`05/02` §3.0.5） |
-| **U4-04** | 原厂 DDK **自身**宣称的 UK ABI / padding 是否清零 / props 是否严格校验 | **版本代次已取**：`libGLES_mali.so` 内含 `r49p1-03bet0` **[D·A]**，与 kbase 模块串同代 → UK 1.30（映射）；**padding 门槛已定量**：48 个钩子中 **15 个强制**（含 `CS_QUEUE_REGISTER`、`CS_QUEUE_GROUP_CREATE*`）**[E1]**；**props 机制已明**：`size==0` 协商 + `size < prop_buffer_size` 才 `-EINVAL` **[E1]**；DDK 是否清零/是否协商仍 [U] | 一条 `strace -e ioctl` 或一次反编译（需 `.so` 内部证据） |
-| **U4-10** | GPU 初始化失败后是否 bootloop | 本机 `ro.vendor.mtk.gpu.sw3d=0`（无 CPU 3D 回退）是**风险信号**，非实证 | 故障注入（需可回滚环境，高风险） |
-| **U4-12** | R56p0 固件是否匹配 G925 MC12 | **阻断**：R56 交付包 23 个条目中 `firmware`/`.bin`/`ddk` 命中 **0** → 属商业授权件，不在源码包内 **[E1]** | 取得 R56 固件后按 `09` §6.2 的四项判据验收 |
+| **U4-04** | 原厂 DDK 的 UK ABI / padding 是否清零 / props 是否严格校验 | **三子项**：**a ✅** 版本代次 `r49p1-03bet0` → UK 1.30（映射）**[D·A]**；**b ✅ 结构体布局无实质差异**——51 个共同结构体中仅 2 处不同（`mem_sync` 纯重命名；CSG 112→120 被 `_1_35` 逐字段迁移吸收）**[E1]**（`05/09` §11.1）；**c ❌** DDK 是否对 15 个强制校验结构体清零 | 一条 `strace -f -e trace=ioctl` 抓 `eglInitialize`，或反编译 |
+| **U4-10** | GPU 初始化失败后是否 bootloop | ⚠️ **PARTIAL**：**静态已排除启动阻断**——CSF 固件在首次 `open()` 加载、probe 不涉及，失败只让 `open` 返回错误，可重试；R49/R56 同构 **[E1]**（`05/09` §11.3）。剩余：真实故障下的**可用性丧失**程度 | 故障注入（需可回滚环境，本轮禁止） |
+| **U4-12** | R56p0 固件是否匹配 G925 MC12 | ⛔ **BLOCKED**：R56 交付包 23 个条目中 `firmware`/`.bin`/`ddk` 命中 **0** → 属商业授权件 **[E1]** | 取得固件后按 `09` §6.2 四项判据验收 |
 
 ### 3.3 来源审计新增项（**不是 P0**）
 
 | ID | 内容 | 优先级 | 现有证据 |
 | --- | --- | --- | --- |
 | U4-24 | 设备侧 GPU `.ko` 的**路径 / 文件大小 / SHA256 / vermagic / srcversion**（a）／**`__ksymtab` CRC 与 kCFI 常量**（b） | **P1** | **a ✅ 已闭合**（18 个文件，`05/07` §3.5）；**b 开放**，范围收窄至 kbase（`05/08` §3.7.6） |
+| **U4-14** | DDK 是否使用 R56 已删除的 ioctl | **P1** | ○ OPEN（**本轮精确化**）：R56 实际删除 **6 个**，其中 MTK 私有的 **80**（`INTERNAL_FENCE_WAIT`，仅超时上报 + 可选自愈 reset）与 **55**（`SET_LIMITED_CORE_COUNT`）是生产相关项；DDK 是否调用待 `strace`（`05/09` §11.2） |
 | U4-25 | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否也被绕过） | **P1** | **25a ✅ 闭合**：vermagic 串不符是 `CONFIG_MODVERSIONS` 的原生语义（`same_magic` 忽略 release 串），**不存在也不需要**绕过 **[E1]**；**25b 开放**：真正的开关是 `bypass-kernel` 改 `bad_version`，默认关闭、2026-08-29→10-30 门控恒失效，且该补丁在 CRC 匹配时无行为差异 → **运行态不可观测**；25c 未测 |
 | U4-26 | 设备当前 boot 是否即所链接 CI run 的产物 | P2 | **判据已更换**：`uname -v` 的日期是 `os_patch_level` 派生**常量**（`${YM}-05 04:20:00 UTC`），零信息量 **[E1]**；四项参数一致但不足以定论；缺内核 `build-id` |
 | U4-27 | `/vendor` 当前视图是否被 KSU/NoMount overlay 覆盖 | P2 | 未采 mount 表 |
 
-> 其它 P1：U4-02 / U4-11 / U4-14 / U4-15 / U4-17 / U4-22。P2：U4-06 / U4-07 / U4-16 / U4-19 / U4-20 / U4-21 / U4-26 / U4-27。P3：U4-13 / U4-18 / U4-23。
+> 优先级分布（27 = 3 P0 + 8 P1 + 8 P2 + 3 P3 + 5 已闭合不计级）：P1 = U4-02 / U4-11 / U4-14 / U4-15 / U4-17 / U4-22 / U4-24 / U4-25；P2 = U4-06 / U4-07 / U4-16 / U4-19 / U4-20 / U4-21 / U4-26 / U4-27；P3 = U4-13 / U4-18 / U4-23。
 
 ### 3.4 Stage 4 已确立的结论（按等级）
 
@@ -102,6 +106,10 @@
 | ~~**运行内核绕过 vermagic 校验**~~ → **2026-11-16 撤回**：`CONFIG_MODVERSIONS` 下 `same_magic()` **原生忽略 release 串**，两侧 flags 段逐字符相同 → **合法装载，无需补丁** **[E1]** | **[E1]** + **[D·C]** | "装载成功"仍不构成"与 R56 兼容"的证据，但**可以**作为"被 import 符号 CRC 一致"的证据（前提：`check_version()` 未被 `allow_version_mismatch` 打开，U4-25b）；taint 仅 `(O)`、无 `F` → 未走强制装载 |
 | **模块集合本身不对称**：设备 13 个 GPU 链路模块含 `mtk_ghpm`，仓库 15 个文件里没有它；仓库 3 个 `met_*` 设备未装载 | **[D·B]** + **[E1]** | "仓库 15 = 设备 15"不成立；`mtk_ghpm` 是否需纳入 Stage 5 需在设计中回答 |
 | `lsmod` 的 `size` 是 `core_layout.size`（内存、页对齐），**不是文件大小**；两侧 `ged.ko` 文件同为 1,093,352 B | **[D·A]** | 历史"`ged` 差 409 KB"**结论方向亦错**，已作废（`05/08` §3.2、§3.6.2） |
+| **R49 与 R56 的 UAPI 结构体：51 个共同定义、实质差异 0** | **[E1]** | `mem_sync` 仅字段重命名；CSG 的 112→120 扩展由 `_1_35` 兼容变体 + 逐字段迁移吸收（`05/09` §11.1） |
+| **R56 为 1.0–1.39 全段保留语义路径**：握手 `min()` 无下限；`caps` 表按 `api_version >= required` 降级 | **[E1]** | 这是 R49 DDK（1.30）能工作的**机制性**原因，不是巧合（`06/DDK_DUAL_TRACK_ASSESSMENT.md` §1） |
+| **CSF 固件在首次 `open()` 加载，不在 probe** | **[E1]** | 固件缺失 → `open` 失败，**不阻断启动**、可重试；R49/R56 同构（`05/09` §11.3） |
+| **R56 删除 6 个 ioctl**，含 MTK 私有 `INTERNAL_FENCE_WAIT`（80） | **[E1]** | 80 仅用于 internal fence 超时上报与（可选）自愈 reset，**不在渲染主路径**（`05/09` §11.2） |
 
 ---
 
@@ -135,6 +143,8 @@
 `03_gles_egl_abi.md` 的全部"兼容"结论都在 UAPI 契约层。`min()` 是**夹取**（取较小值），不是"校验"。DDK 版本代次已知（`r49p1-03bet0` → 1.30），但 **padding 清零 / props 协商行为仍未知**（U4-04 剩余子项）。
 
 > **2026-11-16 风险上调（D-025）**：padding **不是**"Arm 全替你清零"的软门槛。全量重算：48 个 `check_padding_*` 中 **28 空 / 5 清零 / 15 强制**，强制集包含 `CS_QUEUE_REGISTER`、`CS_QUEUE_REGISTER_EX`、`CS_QUEUE_GROUP_CREATE_1_6|_1_18|_1_35`、`CS_QUEUE_GROUP_TERMINATE`、`CS_TILER_HEAP_INIT(_1_13)`。**若 1.30 DDK 不清零，GPU 不是降级而是完全不可用**。这是组合 C 的单点致命项，判定成本却最低（一条 `strace -e ioctl`）。
+>
+> **2026-11-16 二次修正（D-026，风险下调）**：上面这条"单点致命"的前提是"DDK 与 R56 的结构体布局不一致"。实测**不成立**——51 个共同结构体实质差异 0，且 R56 对旧版本做了逐字段迁移（`05/09` §11.1）。加上 R49 的 UAPI 明文写 `padding: must be zero`，风险应改为 **"设计上已被覆盖，仅剩实现规范性问题"**，等级由 **P0 致命**下调为 **中**。**但 U4-04c 仍不闭合**——R49 kbase 本身不校验 padding（没有 `mali_kbase_ioctl_helpers.h`），所以"R49 上能跑"不能反推"清零"。
 
 > **props 反而不再是最硬的门槛**：`kbase_api_get_gpuprops` 先以 `size==0` 返回所需长度，只有 `size < prop_buffer_size` 才 `-EINVAL`。DDK 只要做过一次 size=0 探测就不受影响（`05/09` §5.4）。
 
@@ -185,6 +195,8 @@
 | 14 | ~~"该内核绕过 `same_magic()`"~~ | **证伪并撤回** | `CONFIG_MODVERSIONS` 下 release 串本就不参与比较（`05/09` §2） |
 | 15 | "`uname -v` 的时间 = 构建时间" | **禁止** | 该串由 `os_patch_level` 派生（`${YM}-05 04:20:00 UTC`），只编码补丁月（`05/09` §4、D-024） |
 | 13 | "`ged` 差 409 KB，已排除同一二进制" | **证伪并作废** | 两侧文件同为 1,093,352 B；684,032 是 `lsmod` 内存值 |
+| 16 | **DDK-B：R56 Kbase + R46 DDK**（用户提出的降级路线） | **不可推荐（当前证据）** | ①**不解除任何阻断**——R56 kbase 仍要 header 0.4 固件，DDK 版本不改变这一点；②**硬件时间线矛盾**——G925 发布 2024-05-29，R46 ≤ 2024-02，其 workaround 表不可能含 `tKRx`；③R46 的 CSG 结构体 size 落点未知，可能 `-ENOTTY`。详见 `06/DDK_DUAL_TRACK_ASSESSMENT.md` |
+| 17 | "R46 与 R56 版本接近所以兼容" | **禁止表述** | 跨代组合从未在任何平台验证；`_1_35` 的存在恰恰证明"接近"需要专门写迁移代码 |
 
 ---
 
@@ -197,6 +209,8 @@
 | 3 | ~~评估 U4-24 设备侧模块身份采集是否必要~~ | 决定 Stage 3 常量是否必须重导 | ✅ 完成（`b1da0b9`） |
 | 4 | ~~执行 U4-24a 并整合~~ | 设备 `.ko` 身份落地 | ✅ **完成（`b1da0b9` 工具 + 用户执行 + 本轮整合）** |
 | 4b | **U4-24b 单样本比对**：设备端 `readelf -x __versions /vendor_dlkm/lib/modules/ged.ko` 回传 | 判定 14 个模块的 CRC 能否整体沿用 | 无（只读，~96 KB 文本） |
+| 4c | **U4-14 一并判定**：同一条 `strace` 看是否出现 ioctl **55 / 80** | 确认 R49 DDK 是否依赖 R56 已删接口 | 无（与 4d 同一条命令） |
+| 4d | **U4-04c 定性**：`strace -f -e trace=ioctl -o /data/local/tmp/gpu.log` + 一次 `eglInitialize` | 看 `MEM_JIT_INIT` / `CS_QUEUE_*` / `CSG_CREATE` 的 padding 字节 | 低（root，只读） |
 | 5 | ~~处理 U4-25 / U4-26 / U4-27~~ | 界定第三方内核差异面与 vendor 视图真实性 | ✅ **本轮完成复核**：25a 闭合、25b 判据明确；26 判据更换；27 仍缺 mount 表 |
 | 6 | **U4-04 的 padding 子项（现为最贵风险）**：`strace -f -e trace=ioctl -o /data/local/tmp/gpu.log` 抓一次 `eglInitialize` | 看 `MEM_JIT_INIT` / `CS_QUEUE_REGISTER` 的 padding 字节是否清零 | 低（需 root，只读） |
 | 7 | U4-12：取得 R56 固件（商业交付件） | 按 `05/09` §6.2 四项判据验收 | **阻断**（资产不在手） |
@@ -204,20 +218,21 @@
 
 ### 7.1 Stage 5 准入判定
 
-| 层面 | 判定 |
-| --- | --- |
-| 开始 Stage 5 的**设计** | **可以在用户明确授权后开始**（固件分支已唯一：0.3，无需双分支展开） |
-| 给出**可行性定论** | **仍不可以**（U4-04 行为子项、U4-12 未闭合） |
-| 开始**实施**（编译/刷机/替换） | **不可以**（U4-24b 未闭合 + U4-04 padding 未定性 + 无可回滚环境声明 + 验证内核须能证明 `bad_version:` 仍为 `return 0`） |
+| 层面 | 判定 | 依据 |
+| --- | --- | --- |
+| 开始 Stage 5A 的**设计** | **可以**（需用户明确授权） | 5A 硬前置 0 项；2 项可带条件进入（`06/STAGE5_PREREQUISITES.md` §2） |
+| 给出**可行性定论** | **仍不可以** | U4-04c 未定性、U4-12 BLOCKED |
+| 开始 **Stage 5B（实施）** | **不可以** | 4 项硬前置 P-1～P-4 全未满足（`06/STAGE5_PREREQUISITES.md` §1） |
 
-> **Stage 5 当前不允许自动启动。** 必须由用户在 U4-04 行为面 / U4-12 / U4-24b 推进后显式授权。
+> **Stage 5 当前不允许自动启动。** 必须由用户显式授权；且 **Stage 5A 通过 ≠ 允许实施**（`D-011`）。
 >
 > **与上一版相比的变化**：U4-01 闭合使"设计层"的条件从"可双分支展开"变为"单分支"——固件必须换，没有"也许 0.4 能用"的余地。
 >
-> **本版（收尾核验）修正的两条约束**：
+> **本版（TASK-STAGE4-FINAL）新增的三条约束**：
 >
-> 1. **U4-24b 的范围**：从"15 个模块的 CRC 全重导"降为"kbase 必须重导 + 其余 14 个抽样验证"（不变）。
-> 2. **验证环境约束改写**：原写"必须换到未打补丁的内核"——**撤回**，那种内核不存在（`same_magic` 本来就忽略 release 串）。改为：验证内核须能证明 `kernel/module/version.c` 的 `bad_version:` 仍为 `return 0`，即未以 `allow_version_mismatch=true` 构建。
+> 1. **验证环境的判据再放宽**：不必查构建输入——只要装载后 `dmesg` 无 `disagrees about version of symbol`，则"补丁是否打过"对本项目结论**无影响**（`06/STAGE4_FINAL_REPORT.md` §4.5）。
+> 2. **DDK 路线已定**：DDK-A（R56）为首选且唯一推荐；DDK-B（R46）不可推荐，理由见 `06/DDK_DUAL_TRACK_ASSESSMENT.md`。
+> 3. **9 条未验证假设禁止带入下一阶段**（`06/STAGE5_PREREQUISITES.md` §5）。
 
 ---
 
@@ -232,3 +247,4 @@
 | 2026-11-15 | **U4-24 采集工具就绪 + 三处口径更正**（`stage4: add GPU module identity audit`）：新增 `05/tools/collect_gpu_module_identity.sh`（396 行）与 `README_gpu_module_identity.md`（199 行）；`05/08` 新增 §3.6（判定矩阵 / 模块集合映射 / kCFI-CRC 重导依赖分类 / 子项 a-b 拆分）。更正：①`lsmod` size 非文件大小 ②设备多 `mtk_ghpm`（仓库无）③`met_*` 未装载受筛选口径限制。**计数不变 27/5/3/3，U4-24 仍未闭合**；新增 D-018 / D-019 |
 | 2026-11-16 | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**，vermagic 全部 `6.6.118-android15-8-g54a15cf3acba-4k`；②**确立三层内核版本**（运行 6.6.143 第三方／原厂推定 6.6.118-g54a15cf3acba／仓库基线 6.6.118-g57e634f35c1b），**推翻"设备内核 = 6.6.143"**；③**14/15 模块结构完全一致，仅 kbase 实质不同** → REA 重导范围收窄；④**~~发现内核绕过 vermagic 校验~~（已于下一轮撤回）**；⑤"`ged` 差 409 KB"作废（两侧同为 1,093,352 B）；⑥设备 GPU 文件 18 个（仓库缺 3 个）。**计数 27/5/3/3 → 27/5/4/3**；新增 D-020 / D-021 / D-022，D-007 依据改写 |
 | 2026-11-16 | **Stage 4 收尾核验**（`stage4: close remaining audit items with source-level verification`）：新增 `05/09_stage4_closure.md`。**四处更正**：①**"内核绕过 `same_magic()`"撤回**——`CONFIG_MODVERSIONS` 下 release 串本就不比（v6.6 `version.c:88-96`），装载合法；②**真正的绕过开关**是 `bypass-kernel` 改 `bad_version`（默认关闭；2026-08-29→10-30 门控 `== 'true'` 恒失效），U4-25 拆 a/b/c；③**`uname -v` 的日期是补丁月常量**（`${YM}-05 04:20:00 UTC`），不能作构建时间；④**padding 强制校验实为 15 处**（原写"两处"，只读了前 20 个定义），R-C2 由"tiler 失效"上调为"GPU 不可用"。另核：R56 交付包 23 条目**0 个固件**（U4-12 属商业阻断）；`/proc/modules` taint 无 `F`。**计数 27/5/4/3 → 27/5/5/3**（U4-25 转部分闭合）；D-021 改写，新增 D-023 / D-024 / D-025 |
+| 2026-11-16 | **Stage 4 全量收尾 + DDK 双路线评估**（`stage4: finalize stage 4 with full-state ledger and DDK dual-track assessment`）：新增 `06/STAGE4_FINAL_REPORT.md`（27 项五态台账 + 风险登记 + 验收结论 **B**）、`06/DDK_DUAL_TRACK_ASSESSMENT.md`（DDK-A/DDK-B 11 行决策矩阵，推荐 DDK-A、否决 DDK-B）、`06/STAGE5_PREREQUISITES.md`（4 项硬前置 / 2 项带条件 / 9 条禁带假设）；`05/09` 追加 §11。**三条新证据**：①**UAPI 结构体 51 个共同定义、实质差异 0** → U4-04b **闭合**；②**R56 删 6 个 ioctl**（含 MTK 私有 80）→ U4-14 精确化；③**固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**。**计数 27/5/5/3 → 27/5/6/1/15**（五态）；新增 D-026 / D-027 / D-028 / D-029 |

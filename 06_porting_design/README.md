@@ -31,6 +31,16 @@
 └── 06_rollback.md           # 回滚方案：备份、还原、验收
 ```
 
+## 已交付的 Stage 4 收尾文档（2026-11-16）
+
+| 文件 | 内容 | 与上表的关系 |
+| --- | --- | --- |
+| [`STAGE4_FINAL_REPORT.md`](STAGE4_FINAL_REPORT.md) | Stage 4 全量状态台账：27 项五态分布、P0 明细、风险登记、五项实质推进、验收结论 **B** | 取代 `01_options.md` 中"Stage 4 结论"部分的信息来源；`04_risk_register.md` 的 R-A/R-B 编号在此首次登记 |
+| [`DDK_DUAL_TRACK_ASSESSMENT.md`](DDK_DUAL_TRACK_ASSESSMENT.md) | 用户态 DDK 双路线（DDK-A = R56 / DDK-B = R46）的机制分析、10 项核验、11 行决策矩阵、推荐结论 | 新增维度，与上表 A–D 策略**正交** |
+| [`STAGE5_PREREQUISITES.md`](STAGE5_PREREQUISITES.md) | Stage 5A / 5B 的准入清单、4 项硬前置、2 项带条件项、9 条禁止带入的假设 | `01_options.md` / `06_rollback.md` 的前置输入 |
+
+> **命名冲突提示**：`README.md` 中的"路线 A/B/C/D"是**移植策略**（整包替换 / 回移 / 仅换固件 / 不移植）；`DDK_DUAL_TRACK_ASSESSMENT.md` 中的"DDK-A / DDK-B"是**用户态 DDK 版本**。两套编号不可互相引用。
+
 ## 风险登记册字段
 
 | 字段 | 说明 |

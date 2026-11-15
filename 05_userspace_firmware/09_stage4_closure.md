@@ -310,6 +310,8 @@ copy_to_user(...)
 
 ### 8.1 27 项状态（本轮后）
 
+> **注（2026-11-16 第二轮）**：下表是**第一轮**的计数（PARTIAL 5），保留作历史。最终台账见 `06_porting_design/STAGE4_FINAL_REPORT.md` §1，本轮增量为：**U4-04b 闭合**、**U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED** → 五态 **5 / 6 / 1 / 15**（§11）。
+
 | 状态 | 数量 | 明细 |
 | --- | ---: | --- |
 | ✅ 已闭合 | **5** | U4-01 / U4-03 / U4-05 / U4-08 / U4-09 |
@@ -358,3 +360,70 @@ copy_to_user(...)
 | 8 | 本地 `02_r56_source/mali_r56p0/.../mali_kbase_core_linux.c:870-891` | props 两阶段协商 |
 | 9 | 本地 `02_r56_source/_arm_listing/arm_5thgen_package_listing_20261115.json` | 23 条目、0 固件命中 |
 | 10 | 设备采集 `stage4_mod_20261116_000412.txt`（已在库，未重跑） | taint 列、`__versions` 节大小、`uname -v` |
+
+---
+
+## 11. 追加核验（2026-11-16 第二轮，TASK-STAGE4-FINAL）
+
+> 本节为 `09` 第一版之后新增的**独立复核**，不改动 §1–§10 的任何结论；只补三条新证据与一条对 `03` 的自我更正。
+
+### 11.1 新证据一：R49 与 R56 的 UAPI 结构体布局差异只有 2 处（双向全量比对）
+
+对两代 `include/uapi/gpu/arm/midgard/` 的 `mali_kbase_ioctl.h` 与 `csf/mali_kbase_csf_ioctl.h` 做去注释逐字段比对：
+
+| 文件 | 共同结构体 | 字段有差异 | 仅 R49 有 | 仅 R56 有 |
+| --- | ---: | ---: | ---: | ---: |
+| `mali_kbase_ioctl.h` | 28 | 1 | 6 | 0 |
+| `csf/mali_kbase_csf_ioctl.h` | 23 | 1 | 0 | 2 |
+
+- 差异 1：`kbase_ioctl_mem_sync` 首字段 `__u64 handle` → `__u64 gpu_va`，**纯重命名**，布局不变。
+- 差异 2：`kbase_ioctl_cs_queue_group_create` 由 112 B 扩为 120 B 且 ioctl 号 58→63；但 R56 保留 `_1_35` 变体（nr 58 / 112 B），并在 `mali_kbase_core_linux.c:1446-1472` 做**逐字段迁移**，`neural_max` / `fragment_endpoint_task_limit` / `reserved` 一律置 0。
+
+**结论**：`03` §9 与 `06` §2.3 的"契约层 30/30 兼容"由此获得更强的支撑——不是"抽样看起来一样"，而是"51 个共同结构体、实质差异 0（唯一扩展被兼容变体吸收）"。[E1]
+
+### 11.2 新证据二：R56 删除了 6 个 ioctl，其中 1 个是 MTK 私有
+
+| ioctl | 号 | 说明 |
+| --- | ---: | --- |
+| `HWCNT_READER_SETUP` / `HWCNT_VALUES` | 8 | 旧 HWCNT 读取，R49 版本注释已标"Remove" |
+| `DISJOINT_QUERY` | — | 已废弃 |
+| `SET_LIMITED_CORE_COUNT` | 55 | R56 版本注释标 "Remove legacy IOCTLs … at 1.34" |
+| **`INTERNAL_FENCE_WAIT`** | **80** | **MTK 私有**（`CONFIG_MALI_MTK_FENCE_DEBUG`）；R49 实现于 `mali_kbase_core_linux.c:2264`，R56 无 |
+| `CINSTR_GWT_DUMP` | — | 调试用 |
+
+ioctl 80 的用途是**internal fence 超时上报**（日志 + 可选 `mtk_common_debug` 转储 + `CONFIG_MALI_MTK_FENCE_TIMEOUT_RESET` 下的自动 reset），**不在渲染主路径**，但它是"超时自愈"链条上唯一的 MTK 入口。→ 归入 U4-14，并与 U4-10 的"reset 后恢复"关联。
+
+### 11.3 新证据三：CSF 固件加载**不在 probe**，而在首次 `open()`
+
+```c
+/* r56p0 mali_kbase_core_linux.c:790-802 */
+/* Device-wide firmware load is moved here from probing to comply with
+ * Android GKI vendor guideline. */
+ret = kbase_device_firmware_init_once(kbdev);
+if (ret) goto out;
+```
+
+R49 同构（`device/backend/mali_kbase_device_csf.c:463-474` 同一注释）。推论：
+
+| 命题 | 结论 |
+| --- | --- |
+| 固件失败是否导致 probe 失败 / bootloop | **否**（probe 不涉及固件；失败只让 `open()` 返回错误） |
+| 失败后能否重试 | **能**（`firmware_inited` 未置位，下次 `open` 重新加载） |
+| 后果性质 | **可用性丧失**（GPU 全栈不可用），不是**启动阻断** |
+
+→ U4-10 由 OPEN 转 **PARTIAL**。
+
+### 11.4 一条对 `03` 的自我更正
+
+`03` §9.2 第一版写"只有两个真正检查"，`09` §5 已更正为 **15 处强制**。本轮补充其**后果边界**：R49 kbase **根本没有** `mali_kbase_ioctl_helpers.h`（该机制 R50+ 引入），所以 R49 环境下 padding **不被校验**——这既解释了"为什么 R49 DDK 可能不清零"，也说明"R49 上能跑"**不能**反推"清零"。
+
+### 11.5 本轮引用的新增外部/本地证据
+
+| # | 来源 | 用途 |
+| ---: | --- | --- |
+| 11 | `01_original_baseline/.../mali-r49p1/.../include/uapi/gpu/arm/midgard/{mali_kbase_ioctl.h, csf/mali_kbase_csf_ioctl.h}` | 51 个共同结构体的逐字段比对 |
+| 12 | `02_r56_source/.../include/uapi/.../csf/mali_kbase_csf_ioctl.h:296-436, 767-796` | `_1_6` / `_1_18` / `_1_35` / 现版的 nr 与 size |
+| 13 | `02_r56_source/.../mali_kbase_core_linux.c:1446-1472` | `_1_35` 逐字段迁移 |
+| 14 | `02_r56_source/.../mali_kbase_ioctl_helpers.h:137-477` | 15 处强制校验的行号 |
+| 15 | `02_r56_source/.../mali_kbase_hw.c:272`、`mali_kbase_core_linux.c:2512/2582` | `TKRX` 产品名与 `tKRx` workaround 表 |
+| 16 | `01_original_baseline/.../mali-r49p1/.../mali_kbase_core_linux.c:1830-1880, 2264` | ioctl 80 的实际用途 |
