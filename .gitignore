@@ -1,0 +1,31 @@
+# 构建与临时产物：本仓库只做审计，不应出现任何编译输出
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.symvers
+*.order
+*.a
+*.so.*
+.vscode/
+.tmp/
+
+# 日志与临时采集输出
+*.log
+/tmp/
+*.tmp
+
+# 密钥与凭证：任何情况下不得入库
+*.pem
+*.key
+*.p12
+*.jks
+.env
+.env.*
+
+# 大体积归档：实体另行存放，仅在 MANIFEST.md 登记
+*.img
+*.bin.*
+*.tar.gz
+*.7z
