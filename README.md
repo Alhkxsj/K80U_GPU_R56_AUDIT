@@ -2,46 +2,59 @@
 
 > **Redmi K80 至尊版（25060RK16C）· Arm Mali 5th Gen GPU 驱动 R56p0 移植可行性审计**
 
-本仓库是一个**只读式技术审计工程**，用于评估将 Arm Mali 第五代（5th Gen / CSF 架构）GPU 驱动 **R56p0** 移植到本机 Android 16 / Linux 6.6 / MT6991 平台的可行性。仓库本身不是驱动工程，不承载可直接编译的生产代码。
+本仓库是一个**只读式技术审计工程**，用于评估将 Arm Mali 第五代（5th Gen / CSF 架构）GPU 驱动 **R56p0** 移植到本机 **Android 17 / Linux 6.6.143 / MT6991** 平台的可行性。仓库本身不是驱动工程，不承载可直接编译的生产代码。
 
 ---
 
 ## 1. 审计标的
 
-| 项目 | 取值 |
-| --- | --- |
-| 设备型号 | Redmi K80 至尊版 |
-| 机型代码 | 25060RK16C |
-| SoC 平台 | MediaTek **MT6991** |
-| GPU | Arm **Immortalis-G925 MC12**（5th Gen，CSF 固件驱动架构） |
-| 操作系统 | **Android 16** |
-| 内核 | **Linux 6.6**（GKI 形态） |
-| 目标驱动 | Arm Mali GPU DDK **R56p0**（kbase 内核驱动 + CSF firmware + 用户态 blobs） |
+| 项目 | 取值 | 来源 |
+| --- | --- | --- |
+| 设备型号 | Redmi K80 至尊版 | — |
+| 机型代码 | 25060RK16C（代号 `dali`） | `ro.product.model` **[D]** |
+| SoC 平台 | MediaTek **MT6991** | `ro.board.platform` **[D]** |
+| GPU | Arm **Immortalis-G925 MC12**（5th Gen，CSF 固件驱动架构） | `compatible = arm,mali-valhall` **[D]** |
+| 操作系统 | **Android 17（SDK 37）** · HyperOS `OS4.0.3.0.XONCNXM` | `ro.build.version.release/sdk`、`ro.build.fingerprint` **[D]** |
+| 内核 | **Linux 6.6.143-android15-8-gf9aa2fec23c3-4k**（GKI 形态；`android15` 是分支名，非 Android 版本） | `uname -a` **[D]** |
+| 目标驱动 | Arm Mali GPU DDK **R56p0**（kbase 内核驱动 + CSF firmware + 用户态 blobs） | `02_r56_source/` |
 
+> **本表三处已按真机更正（2026-11-15）**：原写 "Android 16"、"Linux 6.6（GKI 形态）"、"机型代码 25060RK16C"（正确但缺代号）。Android 版本差异不是文字问题——它直接影响 `README` §7 第 5 项（KMI/vermagic）与 HyperOS 版本前提。
+>
 > 审计结论必须同时落在三条链路上：**内核驱动（kbase）**、**固件（CSF firmware）**、**用户态（GLES/Vulkan/gralloc/composer）**。任何单点替换都不构成"移植完成"。
 
 ---
 
-## 2. 当前状态（截至 2026-11-15 19:45）
+## 2. 当前状态（截至 2026-11-15 21:00）
 
 | 阶段 | 内容 | 状态 | 产物 / 证据 |
 | --- | --- | --- | --- |
 | Stage 0 | 目录骨架与审计说明 | ✅ 完成 | 本文件、各目录 `README.md` / `MANIFEST.md` |
 | Stage 1 | 参考资料与基线采集 | ✅ 完成 | `01_original_baseline/`（r49p1 源码 581 文件）、`02_r56_source/`（R56p0 454 文件） |
 | Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
-| Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0）+ REA 二进制补充审计 8 份 |
-| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **进行中** | `05_userspace_firmware/` 6 份报告已交付；**固件与用户态 blob 未采集，21 项 UNKNOWN 待补** |
+| Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0） |
+| Stage 3-REA | 二进制逆向补充审计（REA + Ghidra） | ✅ 完成 | `04_mtk_platform/REA_SUPPLEMENT.md` 等 8 份；12 个 `.ko` / 5,440 函数 |
+| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，证据未闭环** | `05_userspace_firmware/` 7 份报告（含 `07_device_evidence.md`）；**23 项 UNKNOWN，闭合 4 项** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
 
-> **Stage 4 的实质进展与硬边界**
+> **Stage 4 的两种状态必须分开读**
 >
-> 已完成：UAPI 契约逐字段比对（ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变）、CSF 固件加载链路两版逐行对照、能力阈值表解析、四组合八维矩阵。
+> | 维度 | 状态 | 说明 |
+> | --- | --- | --- |
+> | **报告交付** | ✅ 完成 | 首轮 6 份（`efd8547`）+ 真机证据整合（`04-fix`，新增第 7 份） |
+> | **证据闭环** | ⚠️ **未完成** | 23 项 UNKNOWN / 闭合 4 项 / 部分闭合 3 项；**P0 仍有 4 项** |
 >
-> 已确认的硬结论：**原厂 CSF 固件 header 为 0.3，R56p0 要求 0.4 且用 `!=` 严格校验 → 组合 B（只换内核）确定不可行**。
+> **已完成（证据支持）**
+> - UAPI 契约逐字段比对：ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、能力表为 ≤1.30 保留旧语义
+> - 真机基线实测：kbase `r49p1-03bet0 (UK version 1.30)`、`/dev/mali0` 在、GPU 服务在跑
+> - 用户态构成实测：`libGLES_mali.so` 53,105,232 B / API 35 / NEEDED `libged`+`libgpud`；Vulkan 为 133,416 B 薄壳
+> - 图形栈依赖实测：HWC/mapper 不链接 DDK，但 NEEDED `libged`；composer 3.3
 >
-> 已修正的预期：**原厂用户态 DDK 在契约层可保留**（此前假设必须同步替换）。最小替换范围收敛为 **Kbase + CSF 固件两件套**。
+> **硬结论（注意证据等级）**
+> - **源码判据**：r56p0 的 CSF 加载器只接受 header `0.4`，用 `!=` 严格校验、无 fallback → **组合 B（只换内核）不可行** **[E1]**
+> - **实测判据**：原厂固件 header 实际值 **仍为 UNKNOWN**（三份采集未覆盖 offset 4/5），仅有 E2 级启动一致性推理指向 `0.3` → 组合 B 的否决**逻辑成立、证据待确认**
+> - **原厂用户态在契约层可保留**（UAPI 全兼容 + `min()` 夹取），但必须**整套**保留，实现层未验证
 >
-> 未完成的原因：仓库内无 `mali_csffw.bin`、无 `libGLES_mali.so`、无 Vulkan ICD、无 gralloc/HWC/VINTF。已提供只读采集脚本 `05_userspace_firmware/tools/collect_device.sh`（不落地二进制），待设备证据补齐后闭合 4 项 P0 UNKNOWN。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7。
+> **未闭环的原因**：缺运行时证据（dmesg / strace / 故障注入），以及两个可用 8 字节与 2 条 `grep` 闭合的 P0 项。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7 与 [`05_userspace_firmware/07_device_evidence.md`](05_userspace_firmware/07_device_evidence.md) §10。
 
 **两条基线均已实体在手**——此前"R56p0 未获取、Stage 2 阻塞"的判断已失效：
 
@@ -120,9 +133,9 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | Stage 0 | 目录骨架与审计说明 | 全仓库 | ✅ 完成 |
 | Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
 | Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
-| Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ REA 二进制补充审计） |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **进行中**（契约层完成，blob 待采集） |
-| Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始 |
+| Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ Stage 3-REA 二进制补充审计） |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 证据未闭环**（23 项 UNKNOWN，闭合 4 项） |
+| Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始（前置条件：U4-01/U4-04 闭合） |
 
 ---
 
@@ -142,12 +155,15 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | --- | --- | --- | --- |
 | 1 | 出厂 kbase 的 `BASE_KERNEL_VERSION` / `MALI_RELEASE_NAME` | ✅ 已确认 | `r49p1-03bet0`，源码 `Makefile:526` 与出厂 `.ko` 的 `K:r49p1-03bet0(GPL)` 逐字符一致；跨至 `r56p0-18eac0`，UK ABI 1.30→1.39（9 个 minor） |
 | 2 | MTK 私有改动是否可枚举、可分离 | ⚠️ 可枚举，**不可分离** | 约 1,200 处注入 / 39 个 `CONFIG_MALI_MTK_*` / 约 70 个专属文件；其中近 900 处在 Arm 核心文件内部（`03_kbase_csf/06` Q5） |
-| 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ✅ **已判定（不兼容）** | 两版加载器逐行对照：`FIRMWARE_HEADER_VERSION_MINOR` **0.3 → 0.4**，且用 `!=` 严格相等校验、无兼容分支 → 原厂固件被 R56p0 拒绝（`05/02` §3）。固件实体仍缺，运行时 GLB 版本为 UNKNOWN |
-| 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ⚠️ **契约层已闭环，实现层未验证** | ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、能力表为 1.30 保留旧语义（`05/03`）。`libGLES_mali.so` 未取得，故"DDK 是否遵守契约"仍为 UNKNOWN（U4-04） |
-| 5 | Android 16 / GKI 6.6 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ❓ 未验证 | 已知出厂 vermagic 为 `g57e634f35c1b`，与开源树 `f089d58c` 不同；模块签名在 TASK 03-REA 中确认为 `signature: absent`，但 KMI 符号 CRC 绑定仍需实机验证 |
+| 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ⚠️ **源码判据已判定 / 实测判据未闭合** | 两版加载器逐行对照：`FIRMWARE_HEADER_VERSION_MINOR` **3 → 4**，`!=` 严格相等、无兼容分支（`05/02` §3.1）。**原厂固件实际 header 值仍为 UNKNOWN**（字节未采，U4-01），仅有 E2 级启动一致性推理指向 0.3（`05/02` §3.0） |
+| 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ⚠️ **契约层已闭环，实现层未验证** | ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、`min()` 夹取保证有效版本 ≤1.30（`05/03`）。真机已确认 `libGLES_mali.so` 存在（53 MB / API 35）及其对 `libged`/`libgpud` 的硬依赖；**DDK 自称版本与行为仍为 UNKNOWN**（U4-04） |
+| 5 | Android 17 / GKI 6.6.143 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ❓ 未验证 | 已知出厂 vermagic 为 `g57e634f35c1b`，真机内核串为 `6.6.143-android15-8-gf9aa2fec23c3-4k`；与开源树 `f089d58c` 不同。模块签名在 TASK 03-REA 中确认为 `signature: absent`，但 KMI 符号 CRC 绑定仍需实机验证 |
 | 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ✅ 已闭环（MTK 侧） | 寄存器映射与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS/电源域由 MTK 平台层负责且**对 kbase 零反向依赖**（`04/01` §4），保留即可 |
 
-> **更新后的闭环状态**：第 3 项已从"未验证"升级为"已判定不兼容"——这是本阶段最重要的结论，它直接把"只换内核"的路径排除。第 4 项在契约层已充分闭环，剩余风险转移到"DDK 是否遵守契约"，属可实测范畴。第 5 项仍需实机验证，是 Stage 4 收尾的最后一个硬门槛。
+> **更新后的闭环状态（2026-11-15 补充核验后）**：
+> - 第 3 项：**源码判据**已判定"r56p0 只接受 0.4"，但**原厂固件实际值仍未实测**。因此该行状态是"**判据成立、证据待补**"，而不是"已闭环"。这是本轮从"✅"降为"⚠️"的唯一一处——因为首轮把"源码要求"当成了"固件实测"。
+> - 第 4 项：契约层充分闭环，且真机补齐了实体构成；剩余风险是"DDK 是否遵守契约"，属可实测范畴（2 条 `grep` 即可推进）。
+> - 第 5 项：仍需实机验证，且**版本前提已从 Android 16 更正为 Android 17**，vermagic/KMI 结论需要在 6.6.143 上重新确认。
 
 ---
 
@@ -163,3 +179,4 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-15 | Stage 3 | `04_mtk_platform/` 完成：7 份报告。结论 **保留 10 / 适配 2 / 重写 0**；建立"MTK 平台层对 kbase 零反向依赖"定理；发现 MGM ops 第 7 槽位静默错配；纠正任务书前提（`mtk_kernel_modules/drivers/` 不存在，平台层实为 15 个 `.ko`） |
 | 2026-11-15 | Stage 3-REA | 引入 REA + Ghidra 12.2 对 12 个 `.ko` / 5,440 函数反编译，出 `REA_SUPPLEMENT.md`。修正 4 项量化前提（`gpufreq_fp` 实为 416B/52 项而非 72B/9 项等），新增 kCFI 类型哈希风险 |
 | 2026-11-15 | Stage 4 | `05_userspace_firmware/` 6 份报告 + 只读采集脚本。**核心结论：固件 header 0.3≠0.4 硬不兼容（组合 B 否决）；原厂用户态契约层可保留（组合 C 候选）**；最小替换范围收敛为 Kbase + 固件两件套。blob 未采集，21 项 UNKNOWN（4 项 P0） |
+| 2026-11-15 | **Stage 4 补充** | **真机证据整合与独立复核**（`04-fix`）：解析三份设备采集（inventory / file_metadata / elf_analysis），新增 `05_userspace_firmware/07_device_evidence.md`。①**固件 header 由"实测 0.3"降级为"E2 推理 + U4-01 UNKNOWN"**——三份采集在原理上取不到 offset 4/5；②Vulkan 存在性由 UNKNOWN 升级为**已闭合**（`vulkan.mali.so` 薄壳 + `ro.hardware.vulkan=mali` + VINTF 1.3）；③**撤回"gralloc/mapper/HWC 免疫"**——HWC/mapper 虽不链接 DDK，但 NEEDED `libged`（事件面）；因 `ged.ko` 不反向依赖 kbase，失效性质为**降级**而非崩溃；④`min()` 语义由"校验"更正为"**夹取**"；⑤README 基线更正为 **Android 17 / SDK 37 / kernel 6.6.143-android15**；⑥新增 U4-22/U4-23；⑦确认 `met_*` 三个模块本机不装载。UNKNOWN 由 21 项调整为 23 项（闭合 4 项 + 部分闭合 3 项） |

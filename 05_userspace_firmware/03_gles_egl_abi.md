@@ -1,12 +1,15 @@
 # 03 — GLES / EGL 用户态 ABI 审计
 
-> **本文件回答**：原厂 `libGLES_mali.so` / `libEGL_mali.so` 能否与 R56p0 Kbase 配合？
+> **本文件回答**：原厂 `libGLES_mali.so` 能否与 R56p0 Kbase 配合？
 >
 > **答案**：**从 UAPI 契约看，可以**——这是本阶段最反直觉、也是证据最充分的结论。但"契约兼容"不等于"实测可用"，关键 gap 见 §12。
 >
-> **前置声明**：仓库内**没有** `libGLES_mali.so` / `libEGL_mali.so`。因此本文件分析的是**内核侧向用户态提供的契约**（[E1] 源码），而非 blob 本身的实现（[U]）。这不是缺陷——契约是唯一有法律效力的接口，blob 必须遵守它。
+> **前置声明（已更新）**：仓库内**没有** `libGLES_mali.so`；**真机上有**（53,105,232 B，`/vendor/lib64/egl/mt6991/`），并已取得 ELF 头、动态段、Build ID 与部分符号。因此本文的证据结构是：
+> - **契约面**：源码 [E1]，完整；
+> - **实体面**：真机元数据 [D]，部分（无版本串、无完整符号表、无 `.text`）；
+> - **行为面**：[U]，完全缺失。
 >
-> 证据等级：**[E1]** 源码直接证据 · **[E2]** 交叉推导 · **[U]** UNKNOWN
+> 证据等级：**[D]** 真机实测 · **[E1]** 源码直接证据 · **[E2]** 交叉推导 · **[U]** UNKNOWN
 
 ---
 
@@ -14,12 +17,14 @@
 
 | 检查面 | 结果 | 证据 |
 | --- | --- | --- |
+| **实体与依赖（本轮新增）** | 真机 53,105,232 B / Build ID `700e6d41` / API 35；NEEDED **绑定 `libged` + `libgpud`**，非自包含 | §1.2–§1.3 **[D]** |
+| **EGL 路径（本轮新增）** | 无 `libEGL_mali.so` **不是缺陷**；系统 `libEGL.so`(API 37) + `egl/<soc>/libGLES_mali.so` 布局可用 | §1.4 **[D]** |
 | ioctl 编号 | 28 个共有，**定义逐字相同**；r56p0 删 5 个、**零新增** | §4 |
 | ioctl 结构体 | 30 个共有，**仅 1 个字段改名**（布局不变） | §5 |
 | 内存标志位 | CSF 视图 **24/24 一致** | §7 |
 | `gpu_props` 属性 ID | 83 个**值全部不变**，新增 3 个**追加在末尾** | §8 |
-| 版本协商 | `min(内核, 用户)`，**1.30 用户态会得到 1.30 语义** | §2 |
-| 能力门槛 | 1.31/1.32/1.35 的新能力在 1.30 下**全部不生效** | §3 |
+| 版本协商 | `min()` **夹取**（非校验），有效版本恒 ≤ 1.30 | §1.5、§2 |
+| 能力门槛 | 1.31/1.32/1.35 的新能力在 ≤1.30 下**全部不生效** | §3 |
 | padding 校验 | r56p0 新增，但**Arm 主动替旧用户态清零** | §9 |
 | MTK UAPI 扩展 | 存在 3 组，**均为尾部追加**，不破坏标准值 | §10 |
 
@@ -29,30 +34,104 @@
 
 ## 1. DDK 版本确认
 
-### 1.1 直接证据缺失
+### 1.1 首轮状态：只有契约，没有实体
 
-| 目标 | 状态 |
-| --- | --- |
-| `libGLES_mali.so` 自身版本串 | **[U]** U4-04（无文件） |
-| ELF Build ID / SONAME | **[U]** 无文件 |
-| 依赖库列表 | **[U]** 无文件 |
+| 目标 | 首轮状态 | 本轮状态 |
+| --- | --- | --- |
+| `libGLES_mali.so` 存在性 | **[U]** 无文件 | ✅ **已实测** |
+| 路径 | 猜测 `egl/` 或 `egl/libEGL_mali.so` | ✅ `/vendor/lib64/egl/**mt6991**/libGLES_mali.so` |
+| 大小 / SHA256 | **[U]** | ✅ 53,105,232 B / `d84ae538…` |
+| Build ID / API level | **[U]** | ✅ `700e6d4112a6a8a5` / **API 35** |
+| 依赖库列表 | **[U]** | ✅ 全量 `DT_NEEDED` 已取得 |
+| **自身版本串（UK ABI 宣称值）** | **[U]** | ❌ **仍缺**（未做 `strings`） |
 
-### 1.2 但"它必须宣称的版本"是可确定的
+### 1.2 实测字段（[D]）
 
-用户态 DDK 与内核协商的版本号，**由内核头文件中的常量定义**——DDK 若违反，握手就会失败。因此原厂 DDK **必然**宣称：
+| 字段 | 值 | 说明 |
+| --- | --- | --- |
+| 类型 | `DYN` / `arm64` / `ELF64 LE` | 标准共享库 |
+| SONAME | `libGLES_mali.so` | |
+| 大小 | 53,105,232 B（50.6 MiB） | 含全部着色器编译器/预编译体，属"肥 DDK" |
+| `.note.android.ident` | **API level 35** | vendor 侧按 Android 15 VNDK 级构建，**低于** system 侧 37 |
+| `.note.gnu.build-id` | `700e6d4112a6a8a5` | 可与 r56p0 DDK 比对是否同批 |
+| `FLAGS` | `SYMBOLIC` + `BIND_NOW` | 符号绑定为**自库优先**且立即绑定 → `LD_PRELOAD` 式拦截对其内部调用无效 |
+| `ANDROID_RELA` / `RELR` | 存在（1,636 B / 30,432 B） | 使用 Android 专有重定位与相对重定位压缩 |
+
+### 1.3 依赖面：这是"可保留"判断的真实边界（[D]）
+
+```
+NEEDED: android.hardware.graphics.allocator-V2-ndk.so   ← 分配走 AIDL allocator HAL
+        android.hardware.graphics.mapper@4.0.so
+        android.hardware.graphics.common-V5-ndk.so
+        arm.mali.platform-V2-ndk.so                     ← ARM 平台 AIDL（压缩率/EGL 格式）
+        libged.so                                       ← MTK GED 用户态
+        libgpud.so                                      ← MTK GPU 数据面
+        libgralloc_extra.so / libgralloc_metadata.so / libgralloctypes_mtk.so
+        libion.so / libdmabufheap.so
+        libladder.so / libbinder_ndk.so / libhardware.so / libbase.so / libutils.so
+        libnativewindow.so / libutilscallstack.so / liblog.so / libcutils.so
+        libz.so / libc++_shared? (libc++.so) / libc.so / libm.so / libdl.so
+```
+
+未定义符号里有两组值得单独记录：
+
+| 组 | 数量级 | 含义 |
+| --- | ---: | --- |
+| `gpudInitialize`、`gpudIsEnabled`、`gpudVk*`、`gpudMisc*`、`g_gpud_context` | **80+** | MTK 在 **GLES 与 Vulkan 两条路径上都插了数据面钩子**；`gpudVkUnion` 说明 Vulkan 也被同一套仪表覆盖 |
+| `ged_create` / `ged_destroy` / `ged_get_sys_info` | 3 | GLES 直接用 GED 做调度/信息查询 |
+
+> **这条推翻了首轮一个隐含假设**："用户态只要 UAPI 兼容就能整体搬过去"。实际上 `libGLES_mali.so` **不是自包含的**——它绑定 `libged`（内核 GED 驱动的用户态）与 `libgpud`（MTK 私有数据面）。**"保留原厂用户态"必须是"整套保留"**，不能替换其中任何一个 MTK 库。
+
+### 1.4 EGL 侧：为什么"没有 `libEGL_mali.so`"不是问题
+
+| 事实 | 值 | 等级 |
+| --- | --- | --- |
+| `ro.hardware.egl` | `mali` | **[D]** |
+| `libEGL_mali.so` | **全域不存在** | **[D]**（`egl/` 目录完整枚举 6 项） |
+| 系统 `libEGL.so` | 287,664 B，API 37，NEEDED 含 `libnativebridge_lazy`/`libnativeloader_lazy`/`libvndksupport` | **[D]** |
+| 系统 `libGLESv2.so` | 117,312 B，API 37，NEEDED `libEGL.so` | **[D]** |
+| 系统运行状态 | HWC/gralloc/gpuserv/SurfaceFlinger 全在跑 | **[D]** |
+
+**推理（[E2]）**：设备能显示画面 ⇒ EGL 初始化成功 ⇒ loader 找到了驱动。因此"缺 `libEGL_mali.so`"**不能**作为异常判据；`egl/<soc>/` 子目录布局说明搜索路径由厂商 linker 配置注入，而非默认平铺。
+
+**仍未确定（[U]，U4-06 降为 P2）**：`mt6991` 子目录如何进入搜索路径；`libGLES_meow.so`（小米拦截层）的注入方式；`libGLES_mali.so` 是否导出 `egl*` 入口（符号输出被采集脚本按关键字筛选，**未见 ≠ 未导出**）。
+
+### 1.5 "它宣称的版本"只能约束上界——首轮此处有过度推断
+
+首轮写的是"原厂 DDK **必然**宣称 1.30"。核对 `kbase_api_handshake` 后，**这句是错的**：
 
 ```c
-/* r49p1 csf/mali_kbase_csf_ioctl.h:121-122 */
-#define BASE_UK_VERSION_MAJOR 1
-#define BASE_UK_VERSION_MINOR 30
+/* r49p1 mali_kbase_core_linux.c:461-479；r56p0 同构 */
+switch (version->major) {
+case BASE_UK_VERSION_MAJOR:
+        version->minor = min_t(int, BASE_UK_VERSION_MINOR, (int)version->minor);  /* ← 夹取 */
+        break;
+default:
+        version->major = BASE_UK_VERSION_MAJOR;      /* ← 不是失败，而是回填内核版本 */
+        version->minor = BASE_UK_VERSION_MINOR;
+        break;
+}
+kbase_file_set_api_version(kfile, version->major, version->minor);   /* 以夹取后的值为准 */
 ```
+
+| 首轮说法 | 实际语义 | 正确表述 |
+| --- | --- | --- |
+| "DDK 必然宣称 1.30" | DDK 宣称 `1.x` 任一值都能握手；`x>30` 被夹到 30，`x<30` 保留 `x` | **DDK 的有效 API 版本恒 ≤ 1.30** [E1] |
+| "DDK 若违反，握手就失败" | major 不为 1 时**不失败**，内核回填自己的版本，由 DDK 自行决定是否继续 | 握手是**夹取**而非**校验** [E1] |
+
+**由此得到一条比首轮更强的结论**：
+
+> 无论原厂 DDK 宣称 `1.28` / `1.30` / 甚至 `1.39`，只要它是在 r49p1 头文件下构建的，其在 **r56p0 内核**上的有效版本都 ≤ 1.30——因为 `min(39, claim) = claim ≤ 30`。
+>
+> 也就是说：**r56p0 不会把原厂 DDK 抬到 1.39 语义**，这一点由 `min()` 单向保证，无需知道 DDK 的宣称值。U4-04 缺的是"它到底宣称多少"，而这个缺口**不改变方向性结论**。
 
 | 项 | 原厂（r49p1 生态） | r56p0 |
 | --- | --- | --- |
-| 宣称的 UK ABI | **1.30** | 1.39 |
-| 依据 | r49p1 UAPI 头常量 | r56p0 UAPI 头常量 `:148-149` |
+| 内核 `BASE_UK_VERSION` | **1.30**（真机 `/sys/module/.../version` 已确认 **[D]**） | 1.39 |
+| DDK 宣称值 | **UNKNOWN**（U4-04） | — |
+| 在 r56p0 上的有效版本 | `min(39, claim) = claim ≤ 30` | 39 |
 
-> 这不是推断，是**逻辑必然**：DDK 编译时用的是 r49p1 的头，`BASE_UK_VERSION_MINOR` 在编译期被固化为 30。
+> 真机证据补强：`/sys/module/mali_kbase_mt6991_r49/version` = `r49p1-03bet0 (UK version 1.30)`，由 `MODULE_VERSION(MALI_RELEASE_NAME " (UK version " …)` 展开（`mali_kbase_core_linux.c:6800`）。这是**内核**的宣称值，[D] 级；DDK 的宣称值仍需设备内 `grep`（见 `07` §10.2）。
 
 ---
 
@@ -88,7 +167,9 @@ static int kbase_api_handshake(struct kbase_file *kfile,
 }
 ```
 
-### 2.2 逐步推演：原厂 1.30 用户态会发生什么
+### 2.2 逐步推演：原厂 DDK（有效版本 ≤ 1.30）会发生什么
+
+> 前提说明：下表按"DDK 宣称 30"推演，这是**最可能**的情形（DDK 用 r49p1 头构建）。若实际宣称 28 或 29，第 2 步结果相应变为 28/29，**第 3–6 步完全不变**——这正是 §1.5 的"上界结论"。
 
 | 步骤 | 用户态 | 内核（r56p0） |
 | --- | --- | --- |
@@ -99,7 +180,7 @@ static int kbase_api_handshake(struct kbase_file *kfile,
 | 5 | — | 因 true，**不**提前建 kctx（走正常路径） |
 | 6 | 收到 `{1, 30}` | 与自身期望一致 → 继续初始化 |
 
-**关键**：内核不会"假装自己是 1.39"。它把 `kfile->api_version` **固定为 1.30**，后续所有能力判断都以 1.30 为基准。
+**关键**：内核不会"假装自己是 1.39"。它把 `kfile->api_version` **固定为 1.30**，后续所有能力判断都以 1.30 为基准。**这一步不依赖 DDK 的宣称值**，只依赖 `min()` 的单向性。
 
 ### 2.3 反例：如果用户态宣称 1.39
 
@@ -688,18 +769,18 @@ union {
 
 | # | 问题 | 答案 | 等级 |
 | ---: | --- | --- | --- |
-| 1 | 用户态 DDK 版本 | **无法确认具体版本串**（无 blob），但**必然宣称 UK ABI 1.30** | [E1]/[U] |
-| 2 | ELF Build ID / SONAME / 依赖 | **UNKNOWN**（无 blob） | [U] |
-| 3 | UK ABI 识别与协商逻辑 | `handshake` 取 `min()`，major 不匹配则回填内核版本 | [E1] |
+| 1 | 用户态 DDK 版本 | **存在性/路径/大小/哈希已实测**；**版本串仍缺**，但有效 API 版本恒 ≤ 1.30 可证 | **[D]** + **[E1]** + **[U]** |
+| 2 | ELF Build ID / SONAME / 依赖 | Build ID `700e6d4112a6a8a5`、SONAME `libGLES_mali.so`、API 35、19 条 NEEDED 全部实测 | **[D]** |
+| 3 | UK ABI 识别与协商逻辑 | `handshake` 取 `min()`（**夹取，不是校验**），major 不匹配则回填内核版本 | [E1] |
 | 4 | GPU 属性查询 ioctl | `GET_GPU_PROPS`，两阶段 size 协商，83 ID 不变 + 3 新增 | [E1] |
 | 5 | 内存分配/导入/释放接口 | 12 个主干 ioctl 全部逐字相同；`MEM_SYNC` 仅字段改名 | [E1] |
 | 6 | r49p1 vs R56p0 UAPI 对照 | 见 §4/§5/§7/§8 | [E1] |
-| 7 | `gpu_props_user_data` / 句柄 / CSG 创建变化 | 结构体 +24 但**不越界**；句柄语义不变；CSG 有 `_1_6/_1_18/_1_35` 三代，1.30 走 `_1_18` | [E1] |
-| 8 | 不兼容时的错误处理 | **无兼容性拒绝**——见 §2.4、§9.3；唯一硬失败点是固件（见 `02_csf_firmware_abi.md`） | [E1] |
+| 7 | `gpu_props_user_data` / 句柄 / CSG 创建变化 | 结构体 +24 但**不越界**；句柄语义不变；CSG 有 `_1_6/_1_18/_1_35` 三代，≤1.30 走 `_1_18` | [E1] |
+| 8 | 不兼容时的错误处理 | **无兼容性拒绝**——见 §2.4、§9.3；唯一硬失败点是固件（见 `02` §3.0） | [E1] |
 
 ### 12.2 核心判断
 
-> **原厂 1.30 用户态与 r56p0 的 UAPI 契约兼容。**
+> **原厂 DDK 与 r56p0 的 UAPI 契约兼容；其有效 API 版本恒 ≤ 1.30。**
 >
 > 支撑：
 > 1. ioctl 面是严格子集，28/28 定义逐字相同
@@ -708,8 +789,11 @@ union {
 > 4. 属性 ID 83/83 不变，新增严格追加
 > 5. 能力表**显式保留 1.30 时代的全部旧行为**
 > 6. padding 校验被 Arm 主动放宽
+> 7. （本轮新增）`min()` 单向夹取 → 即使 DDK 宣称值未知，也不可能被抬到 1.39 语义
 >
-> 这个结论**比 TASK 03 的预期更乐观**——TASK 03 认为用户态必须替换，实测契约层面不需要。
+> 这个结论**比 TASK 03 的预期更乐观**——TASK 03 认为用户态必须替换，契约层面不需要。
+>
+> **但"契约兼容"≠"实测可用"**：真机证据只证明"库存在、依赖是谁、构建于 API 35"，**没有**证明"它在 r56p0 上跑得起来"。措辞上只能写 **"契约层兼容候选"**，不能写"已验证可复用"。
 
 ### 12.3 但这不等于"能用"
 
@@ -717,20 +801,22 @@ union {
 
 | Gap | 说明 | 归属 |
 | --- | --- | --- |
-| **固件不兼容** | header 0.3 ≠ 0.4，**硬阻断** | `02_csf_firmware_abi.md` §3 |
-| 用户态是否用被删的 5 个 ioctl | 若用则 `-ENOTTY` | [U] U4-04 |
+| **固件不兼容** | header 期望 0.3→0.4；实际值 UNKNOWN，见 `02` §3.0 | `02_csf_firmware_abi.md` §3 |
+| 用户态是否用被删的 5 个 ioctl | 若用则 `-ENOTTY` | [U] U4-14 |
 | 用户态是否清零 padding | `MEM_JIT_INIT` 会拒 | [U] U4-04 |
 | 用户态是否严格校验 props 字节数 | 会因 +32 报错 | [U] U4-04 |
 | MTK 扩展是否被依赖 | `internal_fence_wait`/`HWCNT` 失效 | [E3] |
-| CSF 协议语义 | 需固件实体才能验 | [U] |
+| **MTK 运行库耦合**（本轮新增） | 依赖 `libged`/`libgpud`/`libgralloc_*_mtk`，**不能拆**；且 `libged` 本身依赖内核 GED | **[D]** |
+| CSF 协议语义 | 需固件实体 + 运行时才能验 | [U] |
 
 **结论**：`R56p0 Kbase + R56p0 固件 + 原厂用户态`（组合 C）在契约层是**可行候选**，但必须实机验证。详见 `06_abi_compatibility_matrix.md`。
 
 ### 12.4 UNKNOWN（本文件负责部分）
 
-| ID | 内容 | 补齐方式 |
-| --- | --- | --- |
-| U4-04 | 原厂 DDK 的 UK ABI 实际宣称值、是否清 padding、是否严格校验 props | 采集 `libGLES_mali.so` + `strace` 实机 |
-| U4-14 | 原厂 DDK 是否调用被删的 5 个 ioctl | `strace -e ioctl` 实机 |
-| U4-15 | 原厂 DDK 对 `gpu_props` 新 ID 的处理（跳过 or 报错） | 实机 + 反编译 |
-| U4-16 | 原厂 DDK 是否依赖 `HWCNT` 通知做 DVFS | 反编译 + 实机 perfetto |
+| ID | 内容 | 补齐方式 | 现状 |
+| --- | --- | --- | --- |
+| U4-04 | 原厂 DDK 的 UK ABI **宣称值**、是否清 padding、是否严格校验 props | 设备内 `grep`（`07` §10.2）+ 反编译 | 存在性已闭合，语义未闭合 |
+| U4-06 | EGL 加载机制（子目录注入、MEOW、`egl*` 导出） | `ld.config.txt` / `ro.egl.additional_libraries` | 降 P2：可用性已 [D] |
+| U4-14 | 原厂 DDK 是否调用被删的 5 个 ioctl | `strace -e ioctl`（需 root） | 开放 |
+| U4-15 | 原厂 DDK 对 `gpu_props` 新 ID 的处理（跳过 or 报错） | 实机 + 反编译 | 开放 |
+| U4-16 | 原厂 DDK 是否依赖 `HWCNT` 通知做 DVFS | 反编译 + perfetto | 开放 |
