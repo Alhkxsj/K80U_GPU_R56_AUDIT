@@ -22,16 +22,26 @@
 
 ---
 
-## 2. 当前状态（截至 2026-11-15 18:00）
+## 2. 当前状态（截至 2026-11-15 19:45）
 
 | 阶段 | 内容 | 状态 | 产物 / 证据 |
 | --- | --- | --- | --- |
 | Stage 0 | 目录骨架与审计说明 | ✅ 完成 | 本文件、各目录 `README.md` / `MANIFEST.md` |
 | Stage 1 | 参考资料与基线采集 | ✅ 完成 | `01_original_baseline/`（r49p1 源码 581 文件）、`02_r56_source/`（R56p0 454 文件） |
 | Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
-| Stage 3 | MTK 平台层差异比对 | ⏳ 未开始 | `04_mtk_platform/` 仅目录骨架 |
-| Stage 4 | 用户态与固件 ABI 核对 | ⏳ 未开始 | `05_userspace_firmware/` 仅目录骨架 |
+| Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0）+ REA 二进制补充审计 8 份 |
+| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **进行中** | `05_userspace_firmware/` 6 份报告已交付；**固件与用户态 blob 未采集，21 项 UNKNOWN 待补** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
+
+> **Stage 4 的实质进展与硬边界**
+>
+> 已完成：UAPI 契约逐字段比对（ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变）、CSF 固件加载链路两版逐行对照、能力阈值表解析、四组合八维矩阵。
+>
+> 已确认的硬结论：**原厂 CSF 固件 header 为 0.3，R56p0 要求 0.4 且用 `!=` 严格校验 → 组合 B（只换内核）确定不可行**。
+>
+> 已修正的预期：**原厂用户态 DDK 在契约层可保留**（此前假设必须同步替换）。最小替换范围收敛为 **Kbase + CSF 固件两件套**。
+>
+> 未完成的原因：仓库内无 `mali_csffw.bin`、无 `libGLES_mali.so`、无 Vulkan ICD、无 gralloc/HWC/VINTF。已提供只读采集脚本 `05_userspace_firmware/tools/collect_device.sh`（不落地二进制），待设备证据补齐后闭合 4 项 P0 UNKNOWN。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7。
 
 **两条基线均已实体在手**——此前"R56p0 未获取、Stage 2 阻塞"的判断已失效：
 
@@ -110,8 +120,8 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | Stage 0 | 目录骨架与审计说明 | 全仓库 | ✅ 完成 |
 | Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
 | Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
-| Stage 3 | MTK 平台层差异比对 | `04` | ⏳ 未开始 |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | ⏳ 未开始 |
+| Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ REA 二进制补充审计） |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **进行中**（契约层完成，blob 待采集） |
 | Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始 |
 
 ---
@@ -132,12 +142,12 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | --- | --- | --- | --- |
 | 1 | 出厂 kbase 的 `BASE_KERNEL_VERSION` / `MALI_RELEASE_NAME` | ✅ 已确认 | `r49p1-03bet0`，源码 `Makefile:526` 与出厂 `.ko` 的 `K:r49p1-03bet0(GPL)` 逐字符一致；跨至 `r56p0-18eac0`，UK ABI 1.30→1.39（9 个 minor） |
 | 2 | MTK 私有改动是否可枚举、可分离 | ⚠️ 可枚举，**不可分离** | 约 1,200 处注入 / 39 个 `CONFIG_MALI_MTK_*` / 约 70 个专属文件；其中近 900 处在 Arm 核心文件内部（`03_kbase_csf/06` Q5） |
-| 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ❓ 未验证 | 固件二进制未取得（`06` U7） |
-| 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ❓ 未验证 | `libGLES_mali.so` 未取得，无法反汇编核对（`06` U6） |
-| 5 | Android 16 / GKI 6.6 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ❓ 未验证 | 属 Stage 4；已知出厂 vermagic 为 `g57e634f35c1b`，与开源树 `f089d58c` 不同 |
-| 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ⚠️ 部分闭环 | 寄存器映射路径与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS 频点与电源域属 MTK 侧，待 Stage 3 |
+| 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ✅ **已判定（不兼容）** | 两版加载器逐行对照：`FIRMWARE_HEADER_VERSION_MINOR` **0.3 → 0.4**，且用 `!=` 严格相等校验、无兼容分支 → 原厂固件被 R56p0 拒绝（`05/02` §3）。固件实体仍缺，运行时 GLB 版本为 UNKNOWN |
+| 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ⚠️ **契约层已闭环，实现层未验证** | ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、能力表为 1.30 保留旧语义（`05/03`）。`libGLES_mali.so` 未取得，故"DDK 是否遵守契约"仍为 UNKNOWN（U4-04） |
+| 5 | Android 16 / GKI 6.6 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ❓ 未验证 | 已知出厂 vermagic 为 `g57e634f35c1b`，与开源树 `f089d58c` 不同；模块签名在 TASK 03-REA 中确认为 `signature: absent`，但 KMI 符号 CRC 绑定仍需实机验证 |
+| 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ✅ 已闭环（MTK 侧） | 寄存器映射与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS/电源域由 MTK 平台层负责且**对 kbase 零反向依赖**（`04/01` §4），保留即可 |
 
-> 第 3–5 项若无法闭环，结论必须降级为"有条件可行"并附阻塞条件；第 2 项已足以否定"只换核心"的路径。
+> **更新后的闭环状态**：第 3 项已从"未验证"升级为"已判定不兼容"——这是本阶段最重要的结论，它直接把"只换内核"的路径排除。第 4 项在契约层已充分闭环，剩余风险转移到"DDK 是否遵守契约"，属可实测范畴。第 5 项仍需实机验证，是 Stage 4 收尾的最后一个硬门槛。
 
 ---
 
@@ -150,3 +160,6 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-15 | Stage 1（补） | 出厂 `r49p1` 源码取得：`MiCode/MTK_kernel_modules @ bsp-dali-v-oss`（`fe0fa7ff`），落盘 581 文件 / 8.3 MB，四环闭合判定为出厂源码；主内核树 `MiCode/Xiaomi_Kernel_OpenSource @ f089d58c` 落盘（82,279 文件，不含 GPU 驱动） |
 | 2026-11-15 | Stage 2 | R56p0 原包落盘（`AX504X08X-SW-99002-r56p0-18eac0.tar.gz`，454 文件 / 5.58 MB，MD5 `62b1688…` 校验通过）+ `03_kbase_csf` 五域差异审计完成（45 条：13 P0 / 11 P1 / 5 P2 / 16 P3） |
 | 2026-11-15 | docs | 修正 `README.md`、`02_r56_source/SOURCING_STATUS.md`、`02_r56_source/STRUCTURE_MAP.md`、`SOURCE_ACQUISITION.md` 中"R56p0 未获取""r49p1 未获取"的过时表述；历史记录与当前状态分列，原文留痕不删除 |
+| 2026-11-15 | Stage 3 | `04_mtk_platform/` 完成：7 份报告。结论 **保留 10 / 适配 2 / 重写 0**；建立"MTK 平台层对 kbase 零反向依赖"定理；发现 MGM ops 第 7 槽位静默错配；纠正任务书前提（`mtk_kernel_modules/drivers/` 不存在，平台层实为 15 个 `.ko`） |
+| 2026-11-15 | Stage 3-REA | 引入 REA + Ghidra 12.2 对 12 个 `.ko` / 5,440 函数反编译，出 `REA_SUPPLEMENT.md`。修正 4 项量化前提（`gpufreq_fp` 实为 416B/52 项而非 72B/9 项等），新增 kCFI 类型哈希风险 |
+| 2026-11-15 | Stage 4 | `05_userspace_firmware/` 6 份报告 + 只读采集脚本。**核心结论：固件 header 0.3≠0.4 硬不兼容（组合 B 否决）；原厂用户态契约层可保留（组合 C 候选）**；最小替换范围收敛为 Kbase + 固件两件套。blob 未采集，21 项 UNKNOWN（4 项 P0） |
