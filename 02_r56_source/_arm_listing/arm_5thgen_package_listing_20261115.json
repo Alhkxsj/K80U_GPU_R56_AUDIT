@@ -1,0 +1,236 @@
+{
+ "name": "Mali-GPU-Kernel-Device-Drivers",
+ "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/",
+ "fileInfos": [
+  {
+   "name": "AX504X08X-SW-99002-r50p0-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r50p0-00eac0.tar.gz",
+   "platform": "",
+   "target": "2024-06-14",
+   "size": "1272129",
+   "md5": "26040d29608557cb328ed711614216c3",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p0-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p0-00eac0.tar.gz",
+   "platform": "",
+   "target": "2024-04-18",
+   "size": "1263917",
+   "md5": "5b4c51c6b7b2ab9d0d03b53084086804",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r48p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r48p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2024-02-19",
+   "size": "1256259",
+   "md5": "0d6a2fc5904a454c5db51facf0f97222",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r47p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r47p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-12-14",
+   "size": "1249697",
+   "md5": "c8c0f9ff5cff9f5d086fda72e0c2f21e",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r46p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r46p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-11-01",
+   "size": "1238605",
+   "md5": "db9096e4a6fe2036f2de40f6b69050d5",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r45p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r45p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-09-15",
+   "size": "1205456",
+   "md5": "a6bc22efd663720ca98d919373755321",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r44p1-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r44p1-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-10-11",
+   "size": "1153584",
+   "md5": "6853ecb347f2657246b9458bf248db14",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r44p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r44p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-05-19",
+   "size": "1175561",
+   "md5": "782b86082a446f883e365a6fc5808a56",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r43p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r43p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-03-24",
+   "size": "1159702",
+   "md5": "80500bca2c6f148c8648910e6765f6f9",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r42p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r42p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2023-01-27",
+   "size": "1148634",
+   "md5": "736d76ce00743bbdb5a11449edfb9616",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r41p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r41p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2022-11-24",
+   "size": "1104861",
+   "md5": "f45c1007437cb2a375af35d484fe1142",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p1-04eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p1-04eac0.tar.gz",
+   "platform": "",
+   "target": "2024-09-20",
+   "size": "1268581",
+   "md5": "f697e7fa1e957e2d4d8cd158f8f93693",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p2-05eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p2-05eac0.tar.gz",
+   "platform": "",
+   "target": "2024-11-15",
+   "size": "1268714",
+   "md5": "bb11d3fb1ede3dd056aa9ec081fa9577",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p3-06eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p3-06eac0.tar.gz",
+   "platform": "",
+   "target": "2024-12-19",
+   "size": "1268612",
+   "md5": "efe25de91a7f711d4447c8ad004e13d5",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r51p0-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r51p0-00eac0.tar.gz",
+   "platform": "",
+   "target": "2024-08-14",
+   "size": "1282634",
+   "md5": "3064ef953d8332717a38d4c5477900b9",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r52p0-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r52p0-00eac0.tar.gz",
+   "platform": "",
+   "target": "2024-10-03",
+   "size": "1312973",
+   "md5": "e34f824e16e55edae7b4003f3ad7239a",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r53p0-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r53p0-00eac0.tar.gz",
+   "platform": "",
+   "target": "2024-12-03",
+   "size": "1315759",
+   "md5": "00aa4f9b6197888039a59784b64d2b57",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p4-07eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p4-07eac0.tar.gz",
+   "platform": "",
+   "target": "2025-05-02",
+   "size": "1270886",
+   "md5": "738f9004b309017fde5ff2ee90a7dd02",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r54p0-01eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r54p0-01eac0.tar.gz",
+   "platform": "",
+   "target": "2025-05-19",
+   "size": "1098708",
+   "md5": "3bcd3870b58f83442b16b83e432e2f97",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r54p2-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r54p2-00eac0.tar.gz",
+   "platform": "",
+   "target": "2025-09-24",
+   "size": "1128754",
+   "md5": "8b318e75663d9991fba1ffc290db9d2b",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r49p5-08eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r49p5-08eac0.tar.gz",
+   "platform": "",
+   "target": "2025-11-28",
+   "size": "1282639",
+   "md5": "2729079e6ed2252acc3fc5eab49ef77a",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r54p3-00eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r54p3-00eac0.tar.gz",
+   "platform": "",
+   "target": "2025-12-18",
+   "size": "1130061",
+   "md5": "98d3fcb1b4a8ef9c64982ab1d29b95ce",
+   "hidden": false,
+   "ispermalink": false
+  },
+  {
+   "name": "AX504X08X-SW-99002-r56p0-18eac0.tar.gz",
+   "path": "/Mali-Drivers-5th-Gen-GPU-Architecture/Mali-GPU-Kernel-Device-Drivers/AX504X08X-SW-99002-r56p0-18eac0.tar.gz",
+   "platform": "",
+   "target": "2026-06-30",
+   "size": "1147252",
+   "md5": "62b168823691eb61ec29654cbf35e719",
+   "hidden": false,
+   "ispermalink": false
+  }
+ ]
+}

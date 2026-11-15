@@ -6,7 +6,12 @@
 
 | 文件 | 类别 | 来源 | 版本 / 标识 | 采集日期 | 采集方式 | SHA256 |
 | --- | --- | --- | --- | --- | --- | --- |
-| —（暂无） | — | — | — | — | — | — |
+| `third_party/panvk-kbase-android/`（17 个文件，约 272 KB） | 第三方源码参考 | `zenithblue-oss/panvk-kbase-android` @ `cf70e02` | `main` / `panvk-kbase-v26.3.1` | 2026-11-15 | GitHub REST contents API（只读） | 明细见 `ACQUISITION.md` |
+| `third_party/panvk-kbase-android/docs/MALI-VULKAN-NATIVE-FEATURES.md` | 特性矩阵 | 同上 | 98,561 B | 2026-11-15 | 同上 | `0ffbae0c48dea71d` |
+| `third_party/panvk-kbase-android/docs/MALI-GPU-ARCHITECTURES.md` | 架构对照 | 同上 | 24,702 B | 2026-11-15 | 同上 | `a499e41dbfea552b` |
+| `third_party/panvk-kbase-android/docs/KBASE-SPARSE-FEASIBILITY.md` | ABI 参考 | 同上 | 15,462 B | 2026-11-15 | 同上 | `b091960cc5b7d436` |
+| `third_party/panvk-kbase-android/docs/KBASE-PROFILES.md` | 配置档位 | 同上 | 701 B | 2026-11-15 | 同上 | `36570c8121851a2f` |
+| `third_party/panvk-kbase-android/compatibility/devices.json` | 兼容库 | 同上 | 77 条设备记录 | 2026-11-15 | 同上 | `f0ecdcf2404772c1` |
 
 ## 登记规则
 

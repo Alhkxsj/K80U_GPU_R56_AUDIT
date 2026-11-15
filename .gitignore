@@ -29,3 +29,7 @@
 *.bin.*
 *.tar.gz
 *.7z
+
+# 例外：基线证据必须入库
+# 这些 .ko 是出厂固件抽取的审计证据（非本项目构建产物），需随仓库留档
+!01_original_baseline/kernel_ref_mt6991/vendor_dlkm/*.ko
