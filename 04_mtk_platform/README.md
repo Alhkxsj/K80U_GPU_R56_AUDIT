@@ -1,59 +1,57 @@
-# 04_mtk_platform — MTK 平台适配层
+# 04_mtk_platform — MT6991 原厂 GPU 平台适配层
+
+> **状态：TASK 03 已交付**（2026-11-15）。本目录现为审计结论目录，不再是规划占位。
 
 ## 目的
 
-处理**只有 MT6991 成立**的那部分：MediaTek 对 kbase 的私有改动、平台 glue、电源/时钟/OPP 对接、设备树集成。这一层往往是移植成本的主要来源，也是"上游 R56p0 直接替换"最容易失败的地方。
+回答一个核心问题：**能否最大程度保留 MT6991 原厂平台管理体系，只重建它与 R56p0 Kbase/CSF 之间的连接层？**
 
-## 分析对象
+结论：**可以**。保留 10 个模块、适配 2 项、重写 0 项。详见 `06_platform_retention_matrix.md`。
 
-| 子域 | 关注点 |
+## 交付物
+
+| 文件 | 对应任务 | 内容 |
+| --- | --- | --- |
+| `01_module_dependency_audit.md` | 03-A | 15 个 `.ko` 的依赖方向、加载顺序、5 个必答问题 |
+| `02_gpufreq_gpueb_architecture.md` | 03-B | GPUFreq→IPI→GPUEB 调用链、12 条 IPI 通道、52 项 OPP |
+| `03_ged_integration_audit.md` | 03-C | GED 双向交互、devfreq governor 真实语义 |
+| `04_mgm_pma_memory_audit.md` | 03-D | MGM ops 7→7 槽位替换、PMA 逐字节兼容、PBHA/SVP |
+| `05_dts_hardware_resource_audit.md` | 03-E | dtbo 拆包、GPU 节点全属性、6 路中断、缺失属性分析 |
+| `06_platform_retention_matrix.md` | 03-F + §四 | 保留/适配/重写矩阵、最小化路线、**六项 Stage 2 复核** |
+| `MANIFEST.md` | — | 基准核对、SHA256、可执行复核命令、来源完整性 |
+
+## 证据基础（与规划期假设不同，已修正）
+
+规划期假设"MTK 平台层有源码"。实测：`01_original_baseline/mtk_kernel_modules/` 下**只有 r49p1 Kbase（581 文件）**，没有 `drivers/`。MTK 平台层的归档形态是 `kernel_ref_mt6991/vendor_dlkm/` 的 **15 个 `.ko`**。
+
+因此方法改为三条互证的证据链：
+
+1. **ELF 静态解析**：`.symtab` / `__ksymtab` / `__versions` / `.rela.*`（15 个模块均 `not stripped`）
+2. **源码对读**：r49p1 Kbase 本体（调用方侧）
+3. **DTB 反解析**：`mt6991.dtb` 实为 Android DT-Table 封装，拆包后 2,194 节点
+
+## 原规划的子目录去向
+
+规划中的 `vendor_patches/` `power_clock/` `dts/` `firmware_load/` `conflicts/` 五个子目录**未创建**，其内容已并入上表六份报告：
+
+| 原规划 | 现落点 |
 | --- | --- |
-| 私有 patch | MTK 对 kbase 的改动清单：新增平台回调、私有头文件、调试开关、厂商定制路径 |
-| 电源与时钟 | GPU 电源域、regulator、clock gate、上电/掉电时序、漏电与保留态 |
-| 性能管理 | OPP 表 / 频点档位、devfreq 策略、限频与温控耦合点 |
-| 设备树 | GPU 相关节点、`compatible` 串、寄存器基址、中断、iommu 引用、固件加载属性 |
-| 固件加载 | 分区/路径约定、文件名约定、校验方式、与平台安全启动的关系 |
-| 平台差异 | MTK 实际实现与 Arm 文档描述不一致之处（记录冲突，不做单方面裁决） |
+| `vendor_patches/` | `01` §2–§6（模块级）+ `06` §2.3（45 处结构体字段） |
+| `power_clock/` | `02` 全篇 |
+| `dts/` | `05` 全篇 |
+| `firmware_load/` | `02` §3.1（`mali_csffw.bin` 加载未变）+ `04` §3.4（SVP 路径） |
+| `conflicts/` | `06` §3（六项 Stage 2 复核，含 2 项推翻）+ §4 风险登记 |
 
-## 方法
-
-1. **先枚举，后判断**：先把 MTK 私有改动全部列出（`git log` / patch 集 / 目录差异均可），再逐条判定"是否与 R56p0 冲突"。
-2. **按可分离性分级**：
-   - **可分离**：纯平台文件，R56p0 提供等价钩子 → 迁移成本低
-   - **需适配**：钩子签名或时序模型变化 → 需改写
-   - **不可分离**：改动侵入 kbase 核心路径 → 只能以"以 MTK 为底 + 回移"方式处理
-3. **记录时序假设**：电源/时钟时序是隐性契约，必须在文档中显式写明顺序与依赖。
-
-## 目录内文件规划
-
-```
-04_mtk_platform/
-├── README.md
-├── MANIFEST.md
-├── vendor_patches/          # 私有改动清单与逐条说明（patch 文件或 diff 摘要）
-├── power_clock/             # 电源域、时钟、OPP、时序说明
-├── dts/                     # 设备树节点分析（与 01 的快照对照）
-├── firmware_load/           # 固件加载路径与校验链
-└── conflicts/               # 与 Arm 文档/R56p0 的冲突登记
-```
-
-## 准入标准
-
-1. 每条私有改动标注：来源（哪个 BSP 版本/分支）、作用、是否可分离。
-2. 电源时序类结论必须给出"顺序 + 触发条件 + 失败表现"，不接受笼统描述。
-3. 设备树结论必须绑定具体节点路径与属性名。
-
-## 完成标准
-
-- 能定量回答：MTK 私有改动总规模（文件数 / 行数）、其中"不可分离"的比例。
-- 能回答：R56p0 是否提供等价平台钩子；若无，缺口清单是什么。
+理由：TASK 03 规定"只允许写入 `04_mtk_platform/`"，并建议 7 个产物。扁平化便于交叉引用，避免同一结论分散在多层目录。
 
 ## 与相邻目录的边界
 
-- 判据：**换 SoC 也成立** → `03_kbase_csf/`；**只有 MT6991 成立** → 本目录。
-- 方案取舍（"到底选哪条路线"）不在本目录下结论，交 `06_porting_design/`。
+- **换 SoC 也成立** → `03_kbase_csf/`；**只有 MT6991 成立** → 本目录
+- **方案取舍**（选哪条路线、排期、人力）→ `06_porting_design/`，不在本目录下结论
+- 本目录**不含**任何补丁、`.dts` 改动、Makefile/Kconfig 变更
 
-## 风险点
+## 遗留风险
 
-- MTK BSP 与设备实际固件版本可能不一致，私有改动清单可能与设备实跑版本有偏差，需在 `MANIFEST.md` 标注比对基准。
-- 部分平台能力（如安全启动、固件签名）可能使"替换模块"在工程上可行但在设备上不可加载，此类约束必须提前暴露。
+1. **MTK 平台层无源码**：`MiCode/MTK_kernel_modules @ fe0fa7ff` 的 `drivers/gpu/mediatek/**`（211 文件）未归档，导致 6 项 UNKNOWN 无法闭环。
+2. **固件与用户态 DDK 缺失**：`mali_csffw.bin`、`libGLES_mali.so` 全仓 0 命中，固件行为类问题无法静态解决。
+3. **BSP 与出货固件可能不同点**：出厂 `.ko` 的 `vermagic` 为 `6.6.118-android15-8-g57e634f35c1b-4k`，与开源树 `f089d58c` 不同（见 `01_original_baseline/gpu_source_inventory.md` §0 第 10 条）。
