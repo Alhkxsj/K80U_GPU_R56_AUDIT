@@ -33,3 +33,12 @@
 # 例外：基线证据必须入库
 # 这些 .ko 是出厂固件抽取的审计证据（非本项目构建产物），需随仓库留档
 !01_original_baseline/kernel_ref_mt6991/vendor_dlkm/*.ko
+
+# 嵌套 Git 仓库：blobless 克隆（--filter=blob:none --no-checkout）
+# 工作区零实体文件，目录内全部为 .git 元数据与按需拉取的 blob 缓存，入库不可用且污染仓库。
+# 这两个克隆的价值是 commit 锚点，已登记于 01_original_baseline/source_integrity.md：
+#   kernel_src_dali          MiCode/Xiaomi_Kernel_OpenSource @ bsp-dali-v-oss   f089d58c
+#   kernel_dev_modules_dali  MiCode/MTK_kernel_device_modules @ bsp-dali-v-oss e45c3199
+# 复现命令见 source_integrity.md §2。实体源码见 01_original_baseline/mtk_kernel_modules/。
+/01_original_baseline/kernel_src_dali/
+/01_original_baseline/kernel_dev_modules_dali/
