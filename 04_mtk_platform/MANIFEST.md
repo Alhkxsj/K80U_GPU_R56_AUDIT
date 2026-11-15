@@ -45,9 +45,10 @@ MTK 平台层的实际归档形态是 `kernel_ref_mt6991/vendor_dlkm/` 下的 **
 | 4 | `04_mgm_pma_memory_audit.md` | 312 | 16,184 | `d186e90da254f7681ce8c622693d3279448d8387916d246235e6d1eff2da45a2` | 03-D |
 | 5 | `05_dts_hardware_resource_audit.md` | 316 | 16,236 | `86d58e8fceac189bf47f25799f958eeaee3db579f40183011e23388f6d122ce5` | 03-E |
 | 6 | `06_platform_retention_matrix.md` | 354 | 21,581 | `7bd80387b45727d9e8f99bdeccd2688d8652252103cf27cfcbd896d251cdbc46` | 03-F + §四复核 |
-| 7 | `MANIFEST.md` | 本文件 | — | — | — |
+| 7 | `REA_SUPPLEMENT.md` | 713 | 39,909 | `dcb442a39a78b3343a1d422ae6b946ca79e9999eb5b9a72170926c3d8cdaa1dd` | 03-REA |
+| 8 | `MANIFEST.md` | 本文件 | — | — | — |
 
-合计 1,853 行 / 108,963 字节（不含本文件与 `README.md`）。
+合计 2,566 行 / 148,872 字节（不含本文件与 `README.md`）。
 
 ---
 
@@ -61,6 +62,7 @@ MTK 平台层的实际归档形态是 `kernel_ref_mt6991/vendor_dlkm/` 下的 **
 | `04` | PMA 保留（ops 逐字节相同）；MGM 需改签名 + 换槽位 | ops 7 vs 7，第 7 槽语义替换；PBHA 4 bit |
 | `05` | DTS 无需改（phandle 名两版一致）；`sleep-mode-enable=1` | 2,194 节点；6 路中断；`clocks`/`power-domains` 缺失 |
 | `06` | 保留 10 模块 / 适配 2 项 / 重写 0 项；最小化路线成立 | 45 处结构体字段；六项 Stage 2 复核（2 项推翻） |
+| `REA` | 反编译确证三条量化前提错误：`gpufreq_fp` 52 项、MGM 72 B、GED 114 未被引用 | 5,440 函数；22 槽位映射；kCFI 哈希；7 项新风险 |
 
 ---
 
@@ -239,3 +241,4 @@ sed -n '681p'     "$B/backend/gpu/mali_kbase_devfreq.c"                         
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
 | 2026-11-15 | v1.0 | 首次提交：6 份报告 + 本 MANIFEST。含六项 Stage 2 复核（推翻 2 项、收紧 2 项、口径修正 2 项） |
+| 2026-11-15 | v1.1 | 新增 `REA_SUPPLEMENT.md`（TASK 03-REA 二进制逆向补充审计）。反编译 12 个 `.ko` / 5,440 函数，修正 4 项量化前提（`gpufreq_fp` 52 项、MGM 72 B、错配后果方向、GED 114 而非 115），新增 kCFI 类型哈希等 7 项风险。原 6 份报告**未改动** |

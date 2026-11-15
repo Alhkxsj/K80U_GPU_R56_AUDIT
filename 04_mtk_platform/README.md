@@ -1,6 +1,6 @@
 # 04_mtk_platform — MT6991 原厂 GPU 平台适配层
 
-> **状态：TASK 03 已交付**（2026-11-15）。本目录现为审计结论目录，不再是规划占位。
+> **状态：TASK 03 + TASK 03-REA 已交付**（2026-11-15）。本目录现为审计结论目录，不再是规划占位。
 
 ## 目的
 
@@ -18,6 +18,7 @@
 | `04_mgm_pma_memory_audit.md` | 03-D | MGM ops 7→7 槽位替换、PMA 逐字节兼容、PBHA/SVP |
 | `05_dts_hardware_resource_audit.md` | 03-E | dtbo 拆包、GPU 节点全属性、6 路中断、缺失属性分析 |
 | `06_platform_retention_matrix.md` | 03-F + §四 | 保留/适配/重写矩阵、最小化路线、**六项 Stage 2 复核** |
+| `REA_SUPPLEMENT.md` | 03-REA | Ghidra 反编译复核：`gpufreq_fp` 52 项表、MGM 72 B 布局、GED 114 分类、kCFI 约束 |
 | `MANIFEST.md` | — | 基准核对、SHA256、可执行复核命令、来源完整性 |
 
 ## 证据基础（与规划期假设不同，已修正）
@@ -29,6 +30,7 @@
 1. **ELF 静态解析**：`.symtab` / `__ksymtab` / `__versions` / `.rela.*`（15 个模块均 `not stripped`）
 2. **源码对读**：r49p1 Kbase 本体（调用方侧）
 3. **DTB 反解析**：`mt6991.dtb` 实为 Android DT-Table 封装，拆包后 2,194 节点
+4. **ARM64 反编译**（03-REA 增补）：Ghidra 12.2，12 个模块 / 5,440 函数，用于验证仅靠符号无法判定的结构体布局与调用约定
 
 ## 原规划的子目录去向
 
