@@ -5,6 +5,21 @@
 `mali_r56p0/` 已落盘 Arm 官方原包解包结果，454 个文件 / 5.58 MB，**MD5 与 Arm 清单登记值逐字节一致**。
 本文件保留完整的获取经过、早期阻塞证据（作为审计留痕）与后续待补项。
 
+## 0. 怎么读这个文件（历史记录 vs 当前状态）
+
+本文写于源码获取过程中，前后跨越了"阻塞—解除—下游审计完成"三个阶段，因此**必须分段阅读**：
+
+| 章节 | 性质 | 是否代表当前状态 |
+| --- | --- | --- |
+| §1 包身份、§2 关键结论 | 由已落盘源码直接读出 | ✅ **当前有效** |
+| §3 早期阻塞记录 | 获取当日上午的现场留痕（当日已解除） | ❌ **历史记录**，不代表现状 |
+| §4 待补齐清单 | 获取时点的缺口，部分已在同日补齐 | ⚠️ 见该表"现状"列 |
+| §5 目录一览 | 落盘结构 | ✅ 当前有效 |
+
+**当前状态的权威描述在 [`../README.md`](../README.md) §2**；`03_kbase_csf/` 的差异审计即基于本文 §1 的包与 `01_original_baseline/` 的出厂源码完成。
+
+### 0.1 本包状态速览（当前有效）
+
 | 项 | 结果 |
 | --- | --- |
 | 获取方式 | 用户登录 `developer.arm.com`、接受 EULA 后下载，上传至会话 |
@@ -69,22 +84,20 @@
 
 ---
 
-## 4. 本包不含、仍待补齐的内容
+## 4. 缺口清单（**获取时点**的记录，部分已补齐）
 
-R56p0 只交付**内核驱动**。以下缺口不解，`05` / `06` 无法闭环：
+R56p0 原包只交付**内核驱动**。下表是拿到 R56p0 那一刻的缺口状态，最后一列是同日之后的进展：
 
-| 缺失项 | 归属 | 影响 |
-| --- | --- | --- |
-| CSF 固件 blob（`mali_csffw.bin`） | `05_userspace_firmware` | 固件与 DDK 版本强绑定，版本不符则 GPU 起不来 |
-| 用户态 Mali DDK（`libmali.so` 等，UK 1.39） | `05_userspace_firmware` | ABI 面必须与内核 1.39 对齐 |
-| **r49p1 内核源码** | `01_original_baseline` | 当前仅有 `.ko` 二进制，差异分析只能到符号级 |
-| MTK 私有 GPU 补丁 | `04_mtk_platform` | Arm 原包完全没有，须从 DT / 二进制倒推 |
-| MT6991 GPU 设备树节点 | `04_mtk_platform` | `dtb/mt6991.dtb` 可直接反编译 |
-| 内核基线源码（6.6.118-android15-8） | `01_original_baseline` | 参考仓库只给 `Image.lz4`，无源码 |
+| 缺失项 | 归属 | 影响 | **现状（2026-11-15 晚）** |
+| --- | --- | --- | --- |
+| CSF 固件 blob（`mali_csffw.bin`） | `05_userspace_firmware` | 固件与 DDK 版本强绑定，版本不符则 GPU 起不来 | ❌ **仍缺**（`06` U7） |
+| 用户态 Mali DDK（`libmali.so` 等，UK 1.39） | `05_userspace_firmware` | ABI 面必须与内核 1.39 对齐 | ❌ **仍缺**（`06` U6） |
+| **r49p1 内核源码** | `01_original_baseline` | 无源码则差异分析只能到符号级 | ✅ **已补齐**：`01_original_baseline/mtk_kernel_modules/…/mali-r49p1/`，581 文件 / 8.3 MB，来源 `MiCode/MTK_kernel_modules @ bsp-dali-v-oss`（commit `fe0fa7ff`）；"路径—版本串—模块名—模块清单"四环闭合，见 [`../01_original_baseline/source_integrity.md`](../01_original_baseline/source_integrity.md) §5.1 |
+| MTK 私有 GPU 补丁 | `04_mtk_platform` | Arm 原包完全没有 | ⚠️ **已定位、未成文**：补丁不是独立目录，而是嵌在 r49p1 的 Arm 文件内部，约 1,200 处 / 39 个 `CONFIG_MALI_MTK_*`，已在 `03_kbase_csf/` 逐域清点；正式差异比对留待 Stage 3 |
+| MT6991 GPU 设备树节点 | `04_mtk_platform` | 需从 `dtb/mt6991.dtb` 反编译 | ⚠️ **未开始**（Stage 3） |
+| 内核基线源码（真机 6.6.118-android15-8） | `01_original_baseline` | 参考仓库只给 `Image.lz4` | ⚠️ **部分补齐**：`MiCode/Xiaomi_Kernel_OpenSource @ bsp-dali-v-oss`（`f089d58c`）为 6.6.56 / `android15-6.6`，82,279 文件但**不含 GPU 驱动**；与真机 6.6.118 仍非同一棵树，且与 Android 16 目标存在版本差 |
 
-**其中「r49p1 源码」是最需要你决策的一项**：它是 `03_kbase_csf` 差异对比的对照物。缺它的话，
-差异分析只能做"R56p0 内部结构测绘 + 基线 `.ko` 符号/字符串推断"，精度会明显下降。
-（Arm 历史上 r49p1 未在 5th Gen 页面公开发布，可能需从 MTK BSP 或 Xiaomi 开源包取得。）
+> **历史判断（已被推翻，保留备查）**：本文件初稿曾写道"其中「r49p1 源码」是最需要你决策的一项……缺它则差异分析只能做 `.ko` 符号级推断"。该判断在 r49p1 源码到位后失效——`03_kbase_csf` 的全部结论均为**源码对源码**的实证比对，未使用符号级推断。
 
 ---
 

@@ -22,33 +22,56 @@
 
 ---
 
-## 2. 当前阶段：Stage 0 — 骨架与审计说明
+## 2. 当前状态（截至 2026-11-15 18:00）
 
-**状态：已完成（2026-11-15）**
+| 阶段 | 内容 | 状态 | 产物 / 证据 |
+| --- | --- | --- | --- |
+| Stage 0 | 目录骨架与审计说明 | ✅ 完成 | 本文件、各目录 `README.md` / `MANIFEST.md` |
+| Stage 1 | 参考资料与基线采集 | ✅ 完成 | `01_original_baseline/`（r49p1 源码 581 文件）、`02_r56_source/`（R56p0 454 文件） |
+| Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
+| Stage 3 | MTK 平台层差异比对 | ⏳ 未开始 | `04_mtk_platform/` 仅目录骨架 |
+| Stage 4 | 用户态与固件 ABI 核对 | ⏳ 未开始 | `05_userspace_firmware/` 仅目录骨架 |
+| Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
 
-本阶段的硬约束，全部已遵守：
+**两条基线均已实体在手**——此前"R56p0 未获取、Stage 2 阻塞"的判断已失效：
 
-| 约束 | 执行情况 |
+| 基线 | 落盘位置 | 规模 | 来源与校验 |
+| --- | --- | --- | --- |
+| 出厂 `r49p1-03bet0`（UK ABI **1.30**） | `01_original_baseline/mtk_kernel_modules/gpu/gpu_mali/mali_avalon/mali-r49p1/` | 581 文件 / 8.3 MB | `MiCode/MTK_kernel_modules @ bsp-dali-v-oss`（commit `fe0fa7ff`）；"路径—版本串—模块名—模块清单"四环闭合判定即出厂源码，见 [`source_integrity.md`](01_original_baseline/source_integrity.md) §5.1 |
+| 官方 `r56p0-18eac0`（UK ABI **1.39**） | `02_r56_source/mali_r56p0/driver/product/kernel/` | 454 文件 / 5.58 MB | 用户登录 Arm 下载原包；MD5 `62b168823691eb61ec29654cbf35e719` 与 Arm 清单一致，未 patch、未格式化、未编译 |
+
+### 2.1 Stage 0（历史记录，已完成）
+
+硬约束全部遵守：只建目录与说明文档、未修改源码、未编译、未接触设备、未引入第三方二进制。
+
+### 2.2 Stage 1（历史记录 · 结论已被后续进展推翻）
+
+2026-11-15 上午的采集结论如下，原文保留在 [`SOURCE_ACQUISITION.md`](SOURCE_ACQUISITION.md) 作为留痕，**不代表当前状态**：
+
+| 目标 | 当时结果 | 现状 |
+| --- | --- | --- |
+| Arm R56p0 内核驱动源码 | ❌ 未获取（需 Arm 账号 + EULA） | ✅ **已获取**，454 文件，MD5 校验通过 |
+| 出厂 r49p1 内核源码 | ❌ 仅有 `.ko` 二进制 | ✅ **已获取**，581 文件，四环闭合 |
+| MT6991 内核参考仓库 | ⚠️ 部分获取（仓库只含预编译产物） | ⚠️ 维持：该仓库确无内核源码；主内核树另由 `MiCode/Xiaomi_Kernel_OpenSource @ f089d58c` 补齐（82,279 文件，但**不含任何 GPU 驱动**） |
+| PanVK 第三方参考 | ⚠️ 部分获取 | ⚠️ 维持：仅文档与兼容矩阵，未取主体源码 |
+
+> 采集期的阻塞细节（Arm 站 403、登录跳转、清单令牌等）作为审计留痕保存于 [`02_r56_source/SOURCING_STATUS.md`](02_r56_source/SOURCING_STATUS.md) §3。
+
+### 2.3 Stage 2（当前成果，2026-11-15）
+
+R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_kbase_csf/)：
+
+| 产物 | 内容 |
 | --- | --- |
-| 只创建目录结构与说明文档 | 已执行 |
-| 不修改任何源码 | 未修改（仓库内无源码） |
-| 不编译、不构建 | 未执行任何构建 |
-| 不连接、不修改任何设备 | 未接触设备 |
-| 不引入第三方二进制/固件 | 未引入 |
+| `01_uapi_abi_diff.md` | UAPI / UK ABI：14 条实质差异 + 1 条文档形态变更（`KB-030`）；ABI 1.30→1.39，`base_mem_handle` 删除、`CSG_CREATE` 58→63 / 112→120、`gpu_props_user_data` 568→592 |
+| `02_csf_architecture_diff.md` | CSF 核心：9 条；CSF-only 化、`fw_io` 抽象、reset 路径重构 |
+| `03_memory_mmu_diff.md` | 内存 / MMU：8 条；MGM 签名破坏（P0）、PMA 的 SVP 安全区消失 |
+| `04_pm_interface_diff.md` | 电源：7 条；12 个回调成员一致，但 devfreq 静默退回 `simple_ondemand` |
+| `05_g925_hardware_support.md` | G925：7 条；`kbase_regmap_v12_init` 两版逐字节相同（38 行，均在第 1106 行） |
+| `06_blocking_issues.md` | 汇总：45 条实质差异（13 P0 / 11 P1 / 5 P2 / 16 P3），回答五个终局问题 + U1–U10 |
+| `MANIFEST.md` | 登记、SHA256、可执行复核命令 |
 
-下一阶段为 Stage 1（源码资料采集），已于 2026-11-15 部分执行，结果见 §2.1。
-
----
-
-## 2.1 Stage 1 — 源码资料采集（2026-11-15）
-
-| 目标 | 结果 |
-| --- | --- |
-| Arm R56p0 内核驱动源码 | ❌ 未获取（需 Arm 账号 + EULA 同意） |
-| MT6991 / K80 至尊版内核参考仓库 | ⚠️ 部分获取（仓库为预编译产物仓，非源码） |
-| PanVK Kbase Android 第三方参考 | ⚠️ 部分获取（文档与兼容矩阵子集） |
-
-完整采集报告：**[`SOURCE_ACQUISITION.md`](SOURCE_ACQUISITION.md)**
+核心结论：**不存在"保留 MTK 平台层、只换 Arm 通用核心"的干净切面**——约 1,200 处 MTK 注入中有近 900 处位于 Arm 核心文件内部（见 `06` Q5）。
 
 ---
 
@@ -85,11 +108,11 @@
 | 阶段 | 内容 | 产出目录 | 状态 |
 | --- | --- | --- | --- |
 | Stage 0 | 目录骨架与审计说明 | 全仓库 | ✅ 完成 |
-| Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ⚠️ 部分完成（Arm 源码阻塞） |
-| Stage 2 | R56p0 源码落盘与结构测绘 | `02` `03` | ⏸ 阻塞待源码 |
-| Stage 3 | MTK 平台层差异比对 | `04` | ⏳ 待指令 |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | ⏳ 待指令 |
-| Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 待指令 |
+| Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
+| Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
+| Stage 3 | MTK 平台层差异比对 | `04` | ⏳ 未开始 |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | ⏳ 未开始 |
+| Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始 |
 
 ---
 
@@ -103,18 +126,18 @@
 
 ---
 
-## 7. 待核实的关键问题（审计输入）
+## 7. 关键问题的闭环情况
 
-以下问题决定最终结论走向，在 Stage 1–4 中逐项闭环，当前**均未验证**：
+| # | 问题 | 状态 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 出厂 kbase 的 `BASE_KERNEL_VERSION` / `MALI_RELEASE_NAME` | ✅ 已确认 | `r49p1-03bet0`，源码 `Makefile:526` 与出厂 `.ko` 的 `K:r49p1-03bet0(GPL)` 逐字符一致；跨至 `r56p0-18eac0`，UK ABI 1.30→1.39（9 个 minor） |
+| 2 | MTK 私有改动是否可枚举、可分离 | ⚠️ 可枚举，**不可分离** | 约 1,200 处注入 / 39 个 `CONFIG_MALI_MTK_*` / 约 70 个专属文件；其中近 900 处在 Arm 核心文件内部（`03_kbase_csf/06` Q5） |
+| 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ❓ 未验证 | 固件二进制未取得（`06` U7） |
+| 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ❓ 未验证 | `libGLES_mali.so` 未取得，无法反汇编核对（`06` U6） |
+| 5 | Android 16 / GKI 6.6 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ❓ 未验证 | 属 Stage 4；已知出厂 vermagic 为 `g57e634f35c1b`，与开源树 `f089d58c` 不同 |
+| 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ⚠️ 部分闭环 | 寄存器映射路径与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS 频点与电源域属 MTK 侧，待 Stage 3 |
 
-1. ~~出厂 kbase 的 `BASE_KERNEL_VERSION` / `MALI_RELEASE_NAME` 具体取值~~ → **已确认：`r49p1-03bet0(GPL)`**，与 R56p0 相差 7 个主版本（详见 `SOURCE_ACQUISITION.md`）。
-2. MTK 对 kbase 的私有改动规模（平台 glue、电源管理、内存属性、调试接口）是否可枚举、可分离。
-3. CSF firmware 的 `fw version` 与 kbase `kernel ABI` 的匹配窗口。
-4. 用户态 blobs（`libGLES_mali.so` 等）是否与 R56p0 kbase 的 ioctl/uk ABI 对齐，是否可独立替换。
-5. Android 16 / GKI 6.6 对内核模块的符号与版本约束（`vermagic`、`MODULE_SIG`、KMI）是否允许替换 GPU 模块。
-6. G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态。
-
-> 上述任一项若无法闭环，结论必须降级为"有条件可行"并附阻塞条件。
+> 第 3–5 项若无法闭环，结论必须降级为"有条件可行"并附阻塞条件；第 2 项已足以否定"只换核心"的路径。
 
 ---
 
@@ -123,4 +146,7 @@
 | 日期 | 阶段 | 变更 |
 | --- | --- | --- |
 | 2026-11-15 | Stage 0 | 初始化目录骨架与 8 份审计说明文件，建立留档规范 |
-| 2026-11-15 | Stage 1 | 源码资料采集：确认基线 kbase 为 r49p1-03bet0；落盘 MT6991 参考仓库 GPU 子集（21 文件）与 PanVK 文档子集（17 文件）；Arm R56p0 源码因登录门槛未获取，出具 `SOURCE_ACQUISITION.md` |
+| 2026-11-15 | Stage 1（历史） | 源码资料采集：确认基线 kbase 为 `r49p1-03bet0`；落盘 MT6991 参考仓库 GPU 子集（21 文件）与 PanVK 文档子集（17 文件）；Arm R56p0 源码因登录门槛未获取，出具 `SOURCE_ACQUISITION.md`。**该结论当晚被推翻，见下两行** |
+| 2026-11-15 | Stage 1（补） | 出厂 `r49p1` 源码取得：`MiCode/MTK_kernel_modules @ bsp-dali-v-oss`（`fe0fa7ff`），落盘 581 文件 / 8.3 MB，四环闭合判定为出厂源码；主内核树 `MiCode/Xiaomi_Kernel_OpenSource @ f089d58c` 落盘（82,279 文件，不含 GPU 驱动） |
+| 2026-11-15 | Stage 2 | R56p0 原包落盘（`AX504X08X-SW-99002-r56p0-18eac0.tar.gz`，454 文件 / 5.58 MB，MD5 `62b1688…` 校验通过）+ `03_kbase_csf` 五域差异审计完成（45 条：13 P0 / 11 P1 / 5 P2 / 16 P3） |
+| 2026-11-15 | docs | 修正 `README.md`、`02_r56_source/SOURCING_STATUS.md`、`02_r56_source/STRUCTURE_MAP.md`、`SOURCE_ACQUISITION.md` 中"R56p0 未获取""r49p1 未获取"的过时表述；历史记录与当前状态分列，原文留痕不删除 |

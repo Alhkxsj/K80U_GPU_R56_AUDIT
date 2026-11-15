@@ -2,11 +2,23 @@
 
 > 采集日期：2026-11-15 · 采集方式：只读下载/只读 API · **未修改、未合并、未编译任何源码**
 
-## 0. 结论速览
+> ## ⚠️ 本文是 2026-11-15 上午的采集快照，不是当前状态
+>
+> 文中"R56p0 未获取""`02`/`03` 阻塞"等结论**已于当日晚间解除**，请勿据此判断仓库现状：
+>
+> | 本文的结论 | 现状 |
+> | --- | --- |
+> | F-01：Arm R56p0 内核驱动源码未获取 | ✅ **已获取**，454 文件 / 5.58 MB，MD5 校验通过 → `02_r56_source/mali_r56p0/` |
+> | 出厂 r49p1 仅 `.ko`、无源码 | ✅ **已获取源码**，581 文件 → `01_original_baseline/mtk_kernel_modules/…/mali-r49p1/` |
+> | `02`/`03` 源码级工作无法开展 | ✅ `03_kbase_csf` 五域差异审计已完成（45 条，13 P0） |
+>
+> 现行状态见 [`README.md`](README.md) §2 与 [`02_r56_source/SOURCING_STATUS.md`](02_r56_source/SOURCING_STATUS.md)。本文原样保留，作为"阻塞—解除"过程的审计留痕。
+
+## 0. 结论速览（采集时点）
 
 | 来源 | 目标 | 结果 | 落盘位置 |
 | --- | --- | --- | --- |
-| Arm 官方 | Mali 5th Gen R56p0 内核驱动源码 | ❌ **未获取**（需 Arm 账号登录 + 接受 EULA） | `02_r56_source/mali_r56p0/`（空壳，仅 `.gitkeep`） |
+| Arm 官方 | Mali 5th Gen R56p0 内核驱动源码 | ❌ **未获取**（需 Arm 账号登录 + 接受 EULA）→ **当晚已获取，见文首** | `02_r56_source/mali_r56p0/`（当时为空壳，仅 `.gitkeep`） |
 | GitHub | MT6991 / K80 至尊版内核参考仓库 | ⚠️ **部分获取**（仓库本身只含预编译产物，非内核源码；按 GPU 相关性取 21 个文件） | `01_original_baseline/kernel_ref_mt6991/` |
 | GitHub | PanVK Kbase Android 第三方参考 | ⚠️ **部分获取**（仓库 1.07 GB，带宽 25 KB/s，取文档与兼容矩阵 17 个文件） | `00_reference/third_party/panvk-kbase-android/` |
 
@@ -49,7 +61,7 @@ K80U_GPU_R56_AUDIT/
 
 ## 2. 各源码版本信息
 
-### 2.1 Arm Mali 5th Gen R56p0 内核驱动（❌ 未获取）
+### 2.1 Arm Mali 5th Gen R56p0 内核驱动（❌ 当时未获取 → 当晚已获取）
 
 | 字段 | 值 |
 | --- | --- |
@@ -164,8 +176,8 @@ K80U_GPU_R56_AUDIT/
 
 | # | 项 | 状态 | 原因 | 影响 |
 | --- | --- | --- | --- | --- |
-| F-01 | **Mali R56p0 内核驱动源码** | ❌ 未获取 | 点击下载重定向至 `developer.arm.com/user-login?returnUrl=...`，需 Arm 账号登录并接受 EULA | **阻塞**：`02`/`03` 的源码级工作无法开展 |
-| F-02 | MTK 内核源码（GPU 驱动源码树） | ❌ 不存在于该仓库 | 该仓库只含预编译 `Image.lz4`、`.ko`、`.dtb`、uapi 头，无 `vendor/mediatek/kernel_modules/...` 源码 | `04_mtk_platform` 只能做**二进制级**分析（符号/字符串/依赖），无法出 patch |
+| F-01 | **Mali R56p0 内核驱动源码** | ❌ 未获取 → ✅ **当晚已获取** | 点击下载重定向至 `developer.arm.com/user-login?returnUrl=...`，需 Arm 账号登录并接受 EULA；后由用户登录下载 | **当时阻塞**：`02`/`03` 的源码级工作无法开展；**现已解除**，见 `02_r56_source/SOURCING_STATUS.md` |
+| F-02 | MTK 内核源码（GPU 驱动源码树） | ❌ 不存在于该仓库 | 该仓库只含预编译 `Image.lz4`、`.ko`、`.dtb`、uapi 头，无 `vendor/mediatek/kernel_modules/...` 源码 | `04_mtk_platform` 只能做**二进制级**分析（符号/字符串/依赖）。**补充**：GPU 驱动源码实际在另一仓库 `MiCode/MTK_kernel_modules`，已落盘 581 文件（见 `01_original_baseline/source_integrity.md` §R2） |
 | F-03 | `Image.lz4`（16.5 MB） | ⏸ 未下载 | 单文件过大，25 KB/s 下约 11 分钟且价值低于 `mali.ko` | 低：kbase 版本已从 `.ko` 拿到，镜像仅作交叉验证 |
 | F-04 | `dtbo.img`（8 MB）、`kernel-headers`（942 文件 / 6 MB） | ⏸ 未下载 | 同上，优先保 GPU 相关 | 低：uapi 头对 GPU 审计非关键 |
 | F-05 | 仓库其余 1564 个文件（132.9 MB） | ⏸ 未下载 | 全量约需 90 分钟（25 KB/s）；已保存完整清单 `_inventory/kernel_repo_tree_0576426.json` | 低：非 GPU 模块 |
