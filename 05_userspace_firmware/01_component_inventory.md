@@ -111,7 +111,7 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 
 | 首轮期望 | 实测结果 | 状态 |
 | --- | --- | --- |
-| `/vendor/firmware/mali_csffw.bin` | ✅ 存在，307,200 B，`334fb676…` | 实体元数据已取；**头字节未取**（U4-01） |
+| `/vendor/firmware/mali_csffw.bin` | ✅ 存在，307,200 B，`334fb676…`；**前 16 字节 `6e 3a f1 c3 03 00 00 00 …`** | ✅ **头字节已取：header 0.3**（U4-01 闭合，见 `07` §4.5） |
 | `/vendor/etc/*.xml`（firmware 配置） | ❌ 无 firmware 相关 xml；`/vendor/etc/mali_platform.config`（86 B）属平台配置 | U4-03 已闭合（无 `firmware-name`） |
 | `/vendor_dlkm/lib/modules/*` 的 insmod 参数 | ❌ 未采集 | **残留缺口**，见 `02` §3.0.1 第⑦环 |
 
@@ -122,7 +122,7 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 | 首轮期望 | 实测结果 | 状态 |
 | --- | --- | --- |
 | `/vendor/lib64/egl/libGLES_mali.so` | ❌ 该平铺路径无此文件 | — |
-| `/vendor/lib64/egl/**mt6991**/libGLES_mali.so` | ✅ **真实路径**，53,105,232 B，Build ID `700e6d4112a6a8a5`，note API 35 | 路径类 UNKNOWN 闭合 |
+| `/vendor/lib64/egl/**mt6991**/libGLES_mali.so` | ✅ **真实路径**，53,105,232 B，Build ID `700e6d4112a6a8a5`，note API 35；**内含 release 串 `r49p1-03bet0`** | 路径类 UNKNOWN 闭合；版本代次已取（`07` §5.4） |
 | `/vendor/lib64/egl/libEGL_mali.so` | ❌ **不存在（且不必存在）** | 见 §3.2.1 |
 | `/vendor/lib64/libGLES_mali.so` | ❌ 不存在 | 首轮的"可能主路径"假设排除 |
 | `/vendor/lib64/vulkan/` 或 `hw/vulkan.*.so` | ✅ `/vendor/lib64/hw/mt6991/vulkan.mali.so` | U4-05 闭合 |
@@ -211,10 +211,10 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 
 | ID | 内容 | 缺失证据 | 补齐方式 |
 | --- | --- | --- | --- |
-| U4-01 | 原厂 `mali_csffw.bin` 的 header minor 值 | **8 字节**（不是整个文件） | 按 `02` §3.0.4 的 `od` 命令读数 |
+| ~~U4-01~~ | 原厂 `mali_csffw.bin` 的 header minor 值 | **8 字节**（不是整个文件） | ✅ **已闭合**：`03` / `00` → header `0.3`（2026-11-15 23:20，`07` §4.5） |
 | U4-02 | 原厂固件的 GLB 接口运行时版本 | dmesg `Loading Mali firmware 0x...` | 需 root/重启，暂不采集 |
 | U4-03 | MTK 是否用 DTB `firmware-name` 覆盖固件名 | — | ✅ **已闭合**：DT 无该属性（TASK 03 dtbo + 本轮 `/sys/firmware/devicetree` 双向确认） |
-| U4-04 | 原厂 DDK 的 UK ABI 实际值 / padding 清零 / props 校验 | 设备内 `grep` 两条 | 按 `07` §10.2 采集 |
+| U4-04 | 原厂 DDK 的 UK ABI 实际值 / padding 清零 / props 校验 | 版本串 + 反编译/`strace` | ⚠️ **版本代次已取**：`r49p1-03bet0`（`07` §5.4）；padding / props **仍开放** |
 | U4-05 | 是否存在 Mali Vulkan ICD | — | ✅ **已闭合：存在**（`hw/mt6991/vulkan.mali.so` + `ro.hardware.vulkan=mali` + VINTF 1.3） |
 | U4-06 | EGL 加载路径与配置 | `ld.config.txt` / `ro.egl.additional_libraries` | 降为 P2：EGL **可用**已 [D] 证实，仅机制未知 |
 | U4-07 | gralloc 是否走 dma-buf heap | — | ⚠️ **部分闭合**：分配链为 allocator-V2 AIDL + `mapper.mediatek.so`（NEEDED `libdmabufheap`）；`/dev/dma_heap` 未枚举 |
@@ -226,7 +226,9 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 
 > U4-03 的双重确认：TASK 03 的 dtbo 解析（`04_mtk_platform/05_dts_hardware_resource_audit.md` §2）与本轮 `/sys/firmware/devicetree/base/soc/mali@48000000` 属性枚举，**两侧都不含** `firmware-name`，因此走默认名。此项为 **已闭合**。
 >
-> **U4-01 不受 U4-03 闭合的影响**：固件名确定，只能证明"加载的是哪个文件"，不能证明"该文件的 offset 4 是多少"。
+> **U4-01 曾不受 U4-03 闭合的影响**：固件名确定，只能证明"加载的是哪个文件"，不能证明"该文件的 offset 4 是多少"——这正是当初必须单独补采的原因。**2026-11-15 23:20 已由 `od` 读到 `03`，此项闭合。**
+>
+> 这两条（U4-03 与 U4-01）恰好构成一组对照：**"加载哪个文件"与"文件里写了什么"是两个独立问题**，前者由 DT + 目录枚举回答，后者只能由字节读数回答。
 
 ---
 

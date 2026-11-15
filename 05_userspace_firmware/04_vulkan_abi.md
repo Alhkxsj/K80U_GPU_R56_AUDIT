@@ -151,18 +151,18 @@
 
 ---
 
-## 4. 验证路径（第 1–3 步已用现有采集完成）
+## 4. 验证路径（第 1–3 步已用现有采集完成，第 2 步改由 release 串替代）
 
 | 步骤 | 操作 | 判据 | 状态 |
 | ---: | --- | --- | --- |
 | 1 | `readelf -d <vulkan 模块> \| grep NEEDED` | 是否依赖 `libGLES_mali.so` | ✅ **已完成：是，唯一非 libc 依赖** |
-| 2 | `strings <libGLES_mali.so> \| grep -E "^1\.[0-9]{2}$"` | 找 UK ABI 版本串 | ❌ 未做（`readelf` 只有动态段） |
+| 2 | `strings <libGLES_mali.so> \| grep -E "^1\.[0-9]{2}$"` | 找 UK ABI 版本串 | ⚠️ **改由 release 串完成**：`r49p1-03bet0`（`07` §5.4）。**该 `^1\.[0-9]{2}$` 模式本身未单独验证**，故"库内有独立 1.30 字面量"仍未知 |
 | 3 | `readelf -n <so>` | Build ID，用于与 GLES 比对 | ✅ **已完成**：`9b2f75009917c80b` |
 | 4 | `cat /vendor/etc/vulkan/icd.d/*.json` | ICD 入口 `library_path` 与 `api_version` | ❌ 该目录不存在 |
 | 5 | `dumpsys SurfaceFlinger \| grep -i vulkan` | 系统实际加载的 Vulkan 实现 | ❌ 需 root |
 | 6 | `strace -f -e ioctl <vk_app>` | 观察 `VERSION_CHECK` 的 major/minor 实参 | ❌ 需 root |
 
-**第 6 步仍是关键**：它直接观察用户态宣称的 UK ABI 版本，是 §2 推断的实证检验。第 2 步可用设备内 `grep -a` 完成，不需 pull 53 MB（见 `07` §10.2）。
+**第 6 步仍是唯一"直接观察"手段**：它看的是 `VERSION_CHECK` 的实际入参，而非任何静态串。第 2 步的替代（release 串）只能回答"是哪一代"，不能回答"握手时传了什么"。二者不等价，**不得互相替代**。
 
 ---
 

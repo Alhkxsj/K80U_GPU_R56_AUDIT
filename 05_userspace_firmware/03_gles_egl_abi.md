@@ -9,7 +9,7 @@
 > - **实体面**：真机元数据 [D]，部分（无版本串、无完整符号表、无 `.text`）；
 > - **行为面**：[U]，完全缺失。
 >
-> 证据等级：**[D]** 真机实测 · **[E1]** 源码直接证据 · **[E2]** 交叉推导 · **[U]** UNKNOWN
+> 证据等级：**[D·A]** 厂商分区静态实测 · **[E1]** 源码直接证据 · **[E2]** 交叉推导 · **[U]** UNKNOWN
 
 ---
 
@@ -43,7 +43,8 @@
 | 大小 / SHA256 | **[U]** | ✅ 53,105,232 B / `d84ae538…` |
 | Build ID / API level | **[U]** | ✅ `700e6d4112a6a8a5` / **API 35** |
 | 依赖库列表 | **[U]** | ✅ 全量 `DT_NEEDED` 已取得 |
-| **自身版本串（UK ABI 宣称值）** | **[U]** | ❌ **仍缺**（未做 `strings`） |
+| **release 串（版本代次）** | **[U]** | ✅ **`r49p1-03bet0`**（2026-11-15 23:20 补采，`07` §5.4） |
+| **UK ABI 宣称值** | **[U]** | ⚠️ **1.30（由 release 映射，非库内自报）**；`UK version N.N` 字面量未命中 |
 
 ### 1.2 实测字段（[D]）
 
@@ -127,11 +128,18 @@ kbase_file_set_api_version(kfile, version->major, version->minor);   /* 以夹�
 
 | 项 | 原厂（r49p1 生态） | r56p0 |
 | --- | --- | --- |
-| 内核 `BASE_UK_VERSION` | **1.30**（真机 `/sys/module/.../version` 已确认 **[D]**） | 1.39 |
-| DDK 宣称值 | **UNKNOWN**（U4-04） | — |
-| 在 r56p0 上的有效版本 | `min(39, claim) = claim ≤ 30` | 39 |
+| 内核 `BASE_UK_VERSION` | **1.30**（真机 `/sys/module/.../version` 已确认 **[D·C]**） | 1.39 |
+| DDK 自称 release | **`r49p1-03bet0`**（库内可打印串，**[D·A]**，2026-11-15 23:20 补采） | — |
+| DDK 的 UK ABI | **1.30**（由 release 串映射 **[D·A]+[E1]**，非库内自报，见下） | — |
+| 在 r56p0 上的有效版本 | `min(39, 30) = 30` | 39 |
 
-> 真机证据补强：`/sys/module/mali_kbase_mt6991_r49/version` = `r49p1-03bet0 (UK version 1.30)`，由 `MODULE_VERSION(MALI_RELEASE_NAME " (UK version " …)` 展开（`mali_kbase_core_linux.c:6800`）。这是**内核**的宣称值，[D] 级；DDK 的宣称值仍需设备内 `grep`（见 `07` §10.2）。
+> 真机证据补强（两侧现已齐备）：
+>
+> - **内核侧**：`/sys/module/mali_kbase_mt6991_r49/version` = `r49p1-03bet0 (UK version 1.30)`，由 `MODULE_VERSION(MALI_RELEASE_NAME " (UK version " …)` 展开（`mali_kbase_core_linux.c:6800`）。**[D·C]**
+> - **DDK 侧**：`libGLES_mali.so` 内含 `r49p1-03bet0`（`07` §5.4）。**[D·A]**
+> - **两侧同 release 串** → 原厂是"固件 0.3 + kbase r49p1 + DDK r49p1"的**配套组合**。
+>
+> **⚠️ 证据强度必须分开表述**：DDK **不自报** `UK version N.N`（该字面量全文未命中，`grep` 输出 `NOT_FOUND`）。1.30 是由 release 串 `r49p1-03bet0` 经 `BASE_UK_VERSION` 映射得出，不是"库内读到 1.30"。写成"DDK 实测宣称 1.30"属**证据越级**，禁止。
 
 ---
 
@@ -789,7 +797,7 @@ union {
 > 4. 属性 ID 83/83 不变，新增严格追加
 > 5. 能力表**显式保留 1.30 时代的全部旧行为**
 > 6. padding 校验被 Arm 主动放宽
-> 7. （本轮新增）`min()` 单向夹取 → 即使 DDK 宣称值未知，也不可能被抬到 1.39 语义
+> 7. （本轮更新）`min()` 单向夹取 → **DDK 已实测为 `r49p1-03bet0`（→ 1.30）**，因此 r56p0 上的有效版本是 `min(39,30)=30`，不是"假设不会超过 30"，而是"已知就是 30"
 >
 > 这个结论**比 TASK 03 的预期更乐观**——TASK 03 认为用户态必须替换，契约层面不需要。
 >
@@ -801,7 +809,7 @@ union {
 
 | Gap | 说明 | 归属 |
 | --- | --- | --- |
-| **固件不兼容** | header 期望 0.3→0.4；实际值 UNKNOWN，见 `02` §3.0 | `02_csf_firmware_abi.md` §3 |
+| **固件不兼容** | header 期望 0.3→0.4；**实际值已实测为 0.3**（`07` §4.5） | `02_csf_firmware_abi.md` §3 |
 | 用户态是否用被删的 5 个 ioctl | 若用则 `-ENOTTY` | [U] U4-14 |
 | 用户态是否清零 padding | `MEM_JIT_INIT` 会拒 | [U] U4-04 |
 | 用户态是否严格校验 props 字节数 | 会因 +32 报错 | [U] U4-04 |
@@ -815,7 +823,7 @@ union {
 
 | ID | 内容 | 补齐方式 | 现状 |
 | --- | --- | --- | --- |
-| U4-04 | 原厂 DDK 的 UK ABI **宣称值**、是否清 padding、是否严格校验 props | 设备内 `grep`（`07` §10.2）+ 反编译 | 存在性已闭合，语义未闭合 |
+| ~~U4-04~~ | 原厂 DDK 的 UK ABI **宣称值**（✅ 已取）、是否清 padding（开放）、是否严格校验 props（开放） | 反编译 / `strace` | ⚠️ **部分闭合**：release `r49p1-03bet0` [D·A] → UK 1.30；**两个行为子项仍开放** |
 | U4-06 | EGL 加载机制（子目录注入、MEOW、`egl*` 导出） | `ld.config.txt` / `ro.egl.additional_libraries` | 降 P2：可用性已 [D] |
 | U4-14 | 原厂 DDK 是否调用被删的 5 个 ioctl | `strace -e ioctl`（需 root） | 开放 |
 | U4-15 | 原厂 DDK 对 `gpu_props` 新 ID 的处理（跳过 or 报错） | 实机 + 反编译 | 开放 |

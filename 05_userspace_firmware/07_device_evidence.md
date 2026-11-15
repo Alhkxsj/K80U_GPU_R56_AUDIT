@@ -38,11 +38,13 @@
 | --- | --- |
 | 做 | 解析三份真机采集输出；把可公开元数据（路径/大小/SHA256/Build ID/动态段/服务状态）整合进 `01`–`06`；复核首轮的五处过度推断；修正根 `README.md` |
 | 不做 | 不重新执行 Stage 4；不开始 Stage 5；不编译；不替换任何固件或系统库；不上传任何 `.so` / `.bin` / `.ko` 实体；不要求用户重跑已有采集项目 |
-| 唯一例外 | 若存在**可被 8 字节读数直接闭合**的 P0 缺口，提出最小只读命令并等待用户确认（见 §10） |
+| 唯一例外 | 若存在**可被 8 字节读数直接闭合**的 P0 缺口，提出最小只读命令并等待用户确认（见 §10）。**该例外已于 2026-11-15 23:20 执行完毕**：用户运行 `tools/collect_stage4_p0.sh` 并回传纯文本，未上传任何二进制 |
 
 ---
 
-## 1. 输入三件套登记
+## 1. 输入登记（三份基线采集 + 一份 P0 补采）
+
+### 1.0 三份基线采集（2026-11-15 20:56 收到）
 
 | 文件 | 字节 | 行数 | SHA256（本次收到的副本） | 采集时间（文件内） |
 | --- | ---: | ---: | --- | --- |
@@ -52,7 +54,24 @@
 
 > 三份文件**均在设备侧生成**（`OUTPUT: /sdcard/GPU_AUDIT_STAGE4/…`），经本地副本转交，**未进入本仓库**。本仓库只登记其**哈希与解析结论**，不登记其正文。
 
-### 1.1 三份文件各自的能力边界
+### 1.1 P0 补采（2026-11-15 23:20 收到，**闭合 U4-01**）
+
+| 文件 | 采集时间 | 生成方式 | 内容 |
+| --- | --- | --- | --- |
+| `stage4_p0_20261115_232021.txt` | `Sun Nov 15 23:20:21 CST 2026` | 设备端执行 `05_userspace_firmware/tools/collect_stage4_p0.sh`（POSIX sh，只读，无 adb） | 固件前 16 字节 + DDK 版本串 |
+
+| 项 | 值 |
+| --- | --- |
+| 设备 / 代号 | `25060RK16C` / `dali` |
+| Android / 内核 | 17 (SDK 37) / `6.6.143-android15-8-gf9aa2fec23c3-4k` |
+| SELinux / UID | `u:r:ksu:s0` / 0 |
+| 工具可用性 | `od` YES · `xxd` YES · `strings` YES · `readelf` YES · **`hexdump` NO** |
+| 输出位置 | `/data/local/tmp/gpu_audit_p0/stage4_p0_20261115_232021.txt`（设备本地） |
+| 回传形态 | **纯文本**；未复制、未 pull 任何 `.bin` / `.so` |
+
+> 该文件的作用只有一个：**把 U4-01 从推理变为读数**。它在 §1.1 是登记项，在 §4.5 是证据正文。
+
+### 1.2 三份基线采集各自的能力边界
 
 | 文件 | 能回答 | 不能回答 |
 | --- | --- | --- |
@@ -60,7 +79,9 @@
 | `file_metadata` | 22 个关键对象的**大小 / 权限 / SHA256** | 文件内部结构 |
 | `elf_analysis` | 9 个 ELF 的**头 / 动态段 / Build ID / 部分符号**；固件的**可打印字符串** | 固件头字节（offset 0–19）；完整符号表；`.text` 反汇编 |
 
-**关键限制（影响本阶段最重的一条结论）**：`strings` 输出的是可打印字符串，**不含二进制头字段**。固件的 `version_minor`/`version_major` 位于 offset 4 / 5，是原始字节，**不可能出现在任何一份 `strings` 结果里**。这一点直接决定了 §4 的结论。
+**关键限制（只适用于 §1.0 的三份基线，**不适用于 §1.1 的 P0 补采**）**：`strings` 输出的是可打印字符串，**不含二进制头字段**。固件的 `version_minor`/`version_major` 位于 offset 4 / 5，是原始字节，**不可能出现在任何一份 `strings` 结果里**。
+
+> 这条限制曾决定 §4 的结论（"只能推理，不能读数"）。**P0 补采改用 `od -An -tx1 -N 8` 直接读字节，因此不受此限制**——§4.5 给出读数。这里保留该段，是因为它解释了"为什么第一轮不补采就一定拿不到"，是工具选型决定证据边界的一个标准案例。
 
 ---
 
@@ -122,7 +143,9 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | 与仓库基线**源码标签**一致 | 与 `01_original_baseline` 的 `MALI_RELEASE_NAME` 逐字符一致 | **[D·C]**+[E1] |
 | 与仓库基线**二进制**一致 | **否**——vermagic `6.6.118-…` ≠ 运行内核 `6.6.143-…`，见 §3.4 | **[E1]**+[E2] |
 
-> 这是 Stage 4 首轮**拿不到、只能推测**的东西：首轮说"原厂 DDK 必然宣称 1.30"是源码推理 **[E1]**，而现在有设备侧字符串直接确认**内核**就是 1.30。注意区分：这确认的是**内核宣称值**，**不是 DDK 宣称值**（U4-04 仍开放，见 §5.3）。
+> 这是 Stage 4 首轮**拿不到、只能推测**的东西：首轮说"原厂 DDK 必然宣称 1.30"是源码推理 **[E1]**，而现在有设备侧字符串直接确认**内核**就是 1.30。
+>
+> **⚠️ 注意区分（本轮已补齐另一侧）**：本节确认的是**内核宣称值**，不是 DDK 宣称值。DDK 侧已在 §5.4 由 P0 补采闭合——`libGLES_mali.so` 内含同一 release 串 `r49p1-03bet0`。**两侧同串**，这才是"原厂配套"的完整证据。
 >
 > **但版本串只能证明"源码标签相同"，不能证明"构建相同"**。`MODULE_VERSION` 是编译期宏展开，同一个 tag 换一个内核 sublevel 重编，串不变、二进制全变。§3.4 给出反证。
 
@@ -177,7 +200,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 
 ---
 
-## 4. CSF 固件实体：拿到大小与哈希，**仍然拿不到 header 字节**
+## 4. CSF 固件实体：大小、哈希、**头字节（已取得）**
 
 ### 4.1 实测元数据（[D]）
 
@@ -188,6 +211,8 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | 权限 | `-rw-r--r-- root:root 644` |
 | SHA256 | `334fb67648f2ec43f57b24a8972e97b7d54919783d398a88327d7c136fa7de4a` |
 | 唯一性 | `/vendor/firmware/` 下**仅此一个** `mali_csffw*`；`/vendor/firmware_mnt`、`/vendor/etc/firmware` **不存在** |
+| **前 16 字节**（2026-11-15 23:20 补采） | **`6e 3a f1 c3 03 00 00 00 00 00 0a 03 00 00 00 00`** |
+| **header 版本** | **`0.3`**（`offset 4 = 0x03` = minor，`offset 5 = 0x00` = major） |
 
 ### 4.2 为什么"大小 + 哈希"不能推出 header 版本
 
@@ -219,11 +244,59 @@ Firmware hang detected at PC 0x%08x        （"CSFFW Oops!" 路径）
 
 > 该构建标识 `vb421b363…` 是本次唯一新增的**可追踪锚点**：若日后取得 Arm R56p0 固件，可直接比对它是同一分支的不同 commit，还是完全不同的代码线。
 
-### 4.4 结论：U4-01 **保持 UNKNOWN**
+### 4.4 结论：U4-01 **已闭合（[D·A]）**
 
-- **字节未实测** → 不得宣称"已通过真机固件字节确认 0.3"。
-- 但存在一条**强度很高、性质不同**的推理，见 `02_csf_firmware_abi.md` §3.0（"启动一致性"论证）。该推理**不改变 U4-01 的状态**，只把"0.3"从"实测结论"降级为"E2 级推理"。
-- 是否值得补采：见 §10。
+- **字节已实测**：`6e 3a f1 c3 03 00 00 00` → magic OK、`minor = 0x03`、`major = 0x00` → **header 0.3**。
+- 该值**同时推翻**"仍需保留 UNKNOWN"的旧状态，并**坐实** r49p1 判据、**否决** r56p0 判据。
+- 旧推理链（`02` §3.0.1 的八环）已归档为方法学示例，不再作为证据来源。
+
+### 4.5 实测记录与解码（[D·A]）
+
+**原始输出片段**（来自 `stage4_p0_20261115_232021.txt`）：
+
+```
+--- [U4-01] CSF firmware header (first 8 bytes) ---
+PATH: /vendor/firmware/mali_csffw.bin
+SIZE:   307200 bytes
+PERM:   644 root:root
+HEADER_HEX: 6e 3a f1 c3 03 00 00 00
+MAGIC:      OK (0xC3F13A6E little-endian)
+OFFSET4_MINOR: 0x03
+OFFSET5_MAJOR: 0x00
+FIRMWARE_HEADER: 0.3
+SOURCE_CHECK:   matches r49p1 requirement (0.3); r56p0 requires 0.4
+EXTRA_8_15:  00 00 0a 03 00 00 00 00
+```
+
+**字段解码**（字段定义见 `02` §2，来自两版逐字相同的解析代码 [E1]）：
+
+| 偏移 | 字节 | 字段 | 值 | 判定 |
+| ---: | --- | --- | --- | --- |
+| 0x00–0x03 | `6e 3a f1 c3` | `magic` | `0xC3F13A6E` | ✅ 一致 |
+| 0x04 | `03` | `version_minor` | 3 | ✅ **= r49p1 要求；≠ r56p0 要求（4）** |
+| 0x05 | `00` | `version_major` | 0 | ✅ 两版都要求 0 |
+| 0x06–0x07 | `00 00` | 保留（源码未读取） | — | 不参与校验 |
+| 0x08–0x0B | `00 00 0a 03` | `version_hash` | `0x030A0000` | 仅打印 / ktrace，见下 |
+| 0x0C–0x0F | `00 00 00 00` | 保留（源码未读取） | — | — |
+| 0x10–0x13 | **未采集** | `entry_end_offset` | — | 本轮只读到 0x0F |
+
+**三条判定**：
+
+1. **header = `0.3`**，[D·A]。与 `02` §3.1 的 `FIRMWARE_HEADER_VERSION_MINOR(r49p1) = 3` 精确相等。
+2. **r56p0 必拒**：`3 != 4` → `-EINVAL`。组合 B 的否决由 [E2] 升为 **[E1]+[D·A]**。
+3. **原厂配套自洽**：固件 0.3 + kbase `r49p1-03bet0` + DDK `r49p1-03bet0`（见 §5.4），三者同代。
+
+> **⚠️ `version_hash` 防误用（必须写入本节）**
+>
+> `0x030A0000` 若按 `GLB_VERSION` 寄存器格式（`major<<24 | minor<<16 | patch`）解码，恰为 **3.10.0**。**这是数值外观的巧合，不是证据**：
+>
+> - 源码中 `version_hash` 只出现在两处——`dev_notice("Loading Mali firmware 0x%x", version_hash)` 与 ktrace `CSF_FIRMWARE_BOOT` 的 `(hash<<32)|(major<<8)|minor`；
+> - 它**不参与校验**，**不是从 GLB 共享内存读出的**；
+> - 真正决定 GLB 语义的是运行时 `iface->version`，与 header offset 8 无关。
+>
+> 因此 **U4-11 不因本次采集闭合**。任何"0x030A0000 → GLB 3.10.0"的写法，与首轮"E2 当实测"同属越级，禁止。
+>
+> （附注：`%x` 无零填充，dmesg 中将显示 `0x30a0000`。）
 
 ---
 
@@ -276,14 +349,57 @@ hwcomposer.mtk_common.so → libged.so / libdpframework.so / libdrm.so / libpq_s
 2. **HWC 不链接 Mali DDK**：这是首轮只能靠 [E3] 惯例推断的结论，现在是 [D] 事实。
 3. **MTK 用户态库是 GLES 的硬依赖**：`libged` + `libgpud` + 4 个 gralloc 私有库。**"原厂用户态可整体保留"必须限定为"整套保留"**，不能只留 `libGLES_mali.so`。
 
-### 5.3 仍然没有的东西
+### 5.3 仍然没有的东西（版本串已补，其余仍缺）
 
 | 缺口 | 状态 | 影响 |
 | --- | --- | --- |
-| `libGLES_mali.so` 内部版本串（`UK version` / `r49p1-…`） | **无**（只做了 `readelf`，未做 `strings`） | U4-04 开放 |
-| `libGLES_mali.so` 完整符号表 / `.text` | **无**（符号输出被采集脚本按关键字筛选） | U4-04/U4-14 开放 |
+| `libGLES_mali.so` release 串（`r[0-9]{2}p[0-9]-…`） | **✅ 已取**：`r49p1-03bet0`（见 §5.4） | U4-04 的"版本代次"子项闭合 |
+| `libGLES_mali.so` 的 `UK version N.N` 字面量 | **未命中**（该正则全文无匹配） | 只说明"该模式不存在"，**不等于**"无 UK 版本"；由 release 串映射 |
+| `libGLES_mali.so` 完整符号表 / `.text` | **无**（符号输出被采集脚本按关键字筛选） | U4-04 padding 子项 / U4-14 仍开放 |
 | `libgpud_sys.so` 的元数据 | **无**（未列入 metadata 目标） | 只知被 NEEDED，不知其导出 |
 | `libEGL_mali.so` | 全域未见（`egl/` 目录完整枚举 6 项，无此项） | 见 §6 |
+
+### 5.4 DDK release 串实测（[D·A]，第二个关键补采）
+
+**原始输出片段**：
+
+```
+--- [U4-04] Userspace DDK version strings ---
+PATH: /vendor/lib64/egl/mt6991/libGLES_mali.so
+SIZE:   53105232 bytes
+DDK_UK_VERSION: NOT_FOUND
+DDK_RELEASE:    r49p1-03bet0 r49p1-03bet0 r49p1-03bet0
+DDK_GPU_MODEL:  Mali-G71 Mali-G725 Mali-G77 Mali-G720 Mali-G31
+DDK_BUILD_ID:   NOT_FOUND
+```
+
+**解读（逐项，含每项的方法学边界）**：
+
+| 项 | 结果 | 能说明 | **不能**说明 |
+| --- | --- | --- | --- |
+| `DDK_RELEASE` | `r49p1-03bet0` ×3 | **DDK 与内核同 release 串**（`/sys/module/mali_kbase_mt6991_r49/version` 亦为 `r49p1-03bet0`）→ 原厂配套 | 不能说明 DDK 的运行时行为（ioctl/padding） |
+| `DDK_UK_VERSION` | `NOT_FOUND` | 全文**无** `UK version N.N` 该字面模式 | **不能**说"DDK 没有 UK 版本"；`MODULE_VERSION` 那种写法只在内核模块里 |
+| `DDK_GPU_MODEL` | G71 / G725 / G77 / G720 / G31 | 该 `.so` 是**多型号共用**的 DDK 包 | **不能**据此判断是否支持 G925：① `grep -m 5` 只取前 5 条；② 模式 `Mali-[A-Za-z0-9]+` **结构上不匹配** `Immortalis-G925` |
+| `DDK_BUILD_ID` | `NOT_FOUND` | 设备端 `readelf -n \| grep 'Build ID'` 未命中 | **不能**说"无 Build ID"：首轮离线 `readelf` 已取得 `700e6d4112a6a8a5`，属设备端工具差异 |
+
+**由此得到的结论（等级分明）**：
+
+1. **用户态 DDK 是 `r49p1-03bet0`** —— **[D·A]**（厂商分区静态文件内的可打印串）。这是"原厂整套配套"的第三块拼图（固件 0.3 / kbase r49p1 / DDK r49p1）。
+2. **DDK 的 UK ABI 为 1.30** —— **[D·A]+[E1]**：由 `r49p1-03bet0` 这个 release 串，经 `MODULE_VERSION` 展开规则反推（`BASE_UK_VERSION_MAJOR/MINOR` 在同 release 内固定），而**不是**"库内自报 `UK version 1.30`"。二者证据强度不同，必须分开表述。
+3. **padding / props 行为仍未验证** —— **[U]**（U4-04 的两个子项保持开放，需 `strace` 或反编译）。
+
+> **方法学教训（两条，值得记入规范）**：
+>
+> - **`-m N` 会截断，截断后的结果不能用于"不存在"的断言**。`grep -m 5` 只回答"前 5 个匹配是什么"，不回答"还有没有别的"。
+> - **正则模式本身就是盲区**。用 `Mali-*` 找 Immortalis-G925 永远找不到——不是设备没有，是模式不匹配。这与"用 `strings` 找单字节 header"是同一类错误：**工具选型先于结论**。
+
+**与 U4-04 原始定义的对应**（该 ID 内含三个子问题，本次只闭合第一个）：
+
+| 子问题 | 状态 | 依据 |
+| --- | --- | --- |
+| DDK 自称的 UK ABI 是多少 | **已推进**：`r49p1-03bet0` → 1.30 | [D·A]+[E1] |
+| `MEM_JIT_INIT` 的 padding 是否清零 | **开放** | 需反编译 / `strace` |
+| `gpu_props` 是否严格校验字节数 | **开放** | 需反编译 / `strace` |
 
 ---
 
@@ -378,12 +494,13 @@ hwcomposer.mtk_common.so → libged.so / libdpframework.so / libdrm.so / libpq_s
 | "仓库内零用户态实体" | ✅ 仍成立（仓库层面） | 仓库仍未提交任何 `.so`/`.bin` |
 | "Vulkan ICD 是否存在 UNKNOWN" | ✅ **升级为"存在"** | `ro.hardware.vulkan=mali` + `vulkan.mali.so` 实体 + VINTF 1.3 声明 |
 | "gralloc/mapper/HWC 免疫" | ⚠️ **撤回** | HWC 不链接 Mali DDK（[D] 证实），但 NEEDED `libged`；`ged.ko` 不反向依赖 kbase → 失效表现为降级而非崩溃 |
-| "原厂固件 header = 0.3" | ⚠️ **降级为 E2 推理** | 字节未实测，见 `02` §3.0 |
+| "原厂固件 header = 0.3" | ✅ **P0 补采后已实测确认**（三份基线本身只能到 E2 推理，见 `02` §3.0） | §4.5：`6e 3a f1 c3 03 00 00 00` |
 | "原厂用户态契约层可保留" | ✅ **不变**，且新增实现层约束 | 整套依赖 MTK 用户态库，不能拆 |
 | "bootloop UNKNOWN" | ✅ 保持 UNKNOWN | 无 HyperOS 4.0.3.0 实机故障证据 |
 | "EGL 路径 UNKNOWN" | ⚠️ 拆成"可用 [D] / 机制 [U]" | 见 §6 |
 | （隐含）"设备 = 原厂环境" | ⚠️ **不成立**：内核为第三方 GKI（`u:r:ksu:s0`） | §2 / §3 / `08` §1 |
 | "15 个 `.ko` 已装载" | ⚠️ **限定**：装载的是设备侧 `6.6.143` 构建，非仓库 `6.6.118` 基线 | §3.4 |
+| （新增）"DDK 版本代次未知" | ✅ **已取**：`r49p1-03bet0`，与 kbase 同串 | §5.4 |
 
 ---
 
@@ -400,11 +517,11 @@ hwcomposer.mtk_common.so → libged.so / libdpframework.so / libdrm.so / libpq_s
 
 ---
 
-## 10. 是否需要一次最小化只读补充采集
+## 10. 最小化只读补充采集（**已于 2026-11-15 23:20 执行**）
 
-**需要，且只有 3 条命令。** 理由是存在两个**能被几十字节直接闭合**的 P0 缺口，而现有采集在原理上无法覆盖：
+**结论：需要，且只需一次。** 理由是存在两个**能被几十字节直接闭合**的 P0 缺口，而基线采集在原理上无法覆盖。**本次已由用户执行并回传，结果见 §4.5 / §5.4。** 本节保留原始命令与判读表，作为**可复现记录**。
 
-### 10.1 缺口一：固件 header 实际版本（U4-01，P0）
+### 10.1 缺口一：固件 header 实际版本（U4-01，P0）—— **✅ 已闭合**
 
 - 为什么必须采：`version_minor` 是 offset 4 的**单字节**，`strings` 原理上取不到；而它是"组合 B 是否确定不可行"的唯一实测依据。
 - 命令（文件权限 644，通常 `shell` 用户即可读；若被 SELinux 拒绝，前置 `su -c`）：
@@ -416,10 +533,11 @@ adb shell "dd if=/vendor/firmware/mali_csffw.bin bs=1 count=8 2>/dev/null | hexd
 ```
 
 - 读法（`02` §2 已证字段布局）：`6e 3a f1 c3` 是 magic `0xC3F13A6E` 的小端字节；**第 5 个字节 = minor，第 6 个字节 = major**。
-  - `6e 3a f1 c3 03 00 …` → **0.3**，`02` §3 的硬阻断判定由"推理"升级为"实测"；
+  - `6e 3a f1 c3 03 00 …` → **0.3**，`02` §3 的硬阻断判定由"推理"升级为"实测"； ← **本次命中**
   - `6e 3a f1 c3 04 00 …` → **0.4**，则首轮最核心的结论被推翻，必须重写 `02`/`06`。
+- **实际结果**：`6e 3a f1 c3 03 00 00 00` → **0.3**，见 §4.5。
 
-### 10.2 缺口二：DDK 自称的 UK ABI 版本（U4-04，P0）
+### 10.2 缺口二：DDK 自称的 UK ABI 版本（U4-04，P0）—— **✅ 版本代次已取，行为子项仍开放**
 
 - 为什么必须采：`03` 的整套论证是"1.30 DDK 在 r56p0 上走旧语义"，但**DDK 是否真的宣称 1.30** 从未被观测。设备上直接 `grep` 二进制即可，**不需要 pull 53 MB**。
 - 命令：
@@ -430,6 +548,8 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 ```
 
 - 读法：若出现 `UK version 1.30` 与 `r49p1-…`，则"原厂 DDK 与内核同代"由 [E1] 推理变为 [D]；若出现 `1.31+`，则需重算 `min()` 协商的实际落点（结论方向不变，但"1.30 语义"的前提要改）。
+- **实际结果**：第一条 **NOT_FOUND**（该字面模式不存在）；第二条 **`r49p1-03bet0`**。→ 由 release 串映射为 1.30。见 §5.4。
+  - 这条"部分命中"本身就是重要信息：它说明 **DDK 不自报 UK 版本，只自报 release**。因此后续任何"DDK 宣称 N.N"的表述都必须写成"由 release 映射"，不能写成"库内读到"。
 
 ### 10.3 缺口三（可选，非 P0）：模块构建代次（U4-24）
 
@@ -451,4 +571,11 @@ adb shell "sha256sum /vendor/lib64/modules/mali_kbase_mt6991_r49.ko /vendor/lib6
 | `strace` / `dmesg` / `logcat` | 需 root 或重启，超出"最小只读"；待 P0 闭合后再议（U4-14/U4-16/U4-02） |
 | 重跑整份 `collect_device.sh` | 三份文件已覆盖其绝大部分输出 |
 
-> **在用户确认之前，本仓库不会把上述两条缺口写成"已闭合"。** 当前状态：U4-01 = UNKNOWN（有 E2 级推理），U4-04 = UNKNOWN（有 E1 级推理）。
+> **状态（2026-11-15 23:20 更新）**：两条缺口均已按上述命令取得读数。
+>
+> | ID | 旧状态 | 新状态 |
+> | --- | --- | --- |
+> | **U4-01** | UNKNOWN（有 E2 级推理） | **✅ 已闭合 [D·A]**：header `0.3` |
+> | **U4-04** | UNKNOWN（有 E1 级推理） | **⚠️ 部分闭合**：版本代次 `r49p1-03bet0` [D·A]；padding / props 行为仍 [U] |
+>
+> §10.3（U4-24 模块构建代次）**未在本次采集中执行**，保持原状。
