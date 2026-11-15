@@ -1,8 +1,10 @@
 # 05_userspace_firmware — 用户态图形栈与 CSF 固件 ABI
 
-> **状态：TASK 04 已交付（`efd8547`）+ 真机证据补充核验（`04-fix`）+ 来源审计（`stage4: audit … provenance`）**
+> **状态：TASK 04 已交付（`efd8547`）+ 真机证据补充核验（`04-fix`）+ 来源审计（`stage4: audit … provenance`）+ P0 补采工具就绪（`stage4: add minimal P0 device evidence collector`，**待用户执行**）**
 >
 > **三种状态分开记录**：报告 ✅ 已交付；来源归属 ✅ 已澄清（A/B/C 三分）；证据 ⚠️ **未闭环**（27 项 UNKNOWN，闭合 4 项 + 部分闭合 3 项）。
+>
+> **P0 采集工具已就绪但尚未运行**：`tools/collect_stage4_p0.sh` 可在手机端（aShell You，无需电脑）读固件前 8 字节与 DDK 版本串。**在输出回传之前，U4-01 / U4-04 仍为 UNKNOWN**，不得写成已闭合。
 >
 > **来源前置**：设备运行的是**第三方 GKI 内核**（KernelSU 补丁），`/vendor` 与 `/vendor_dlkm` 仍是厂商分区内容。凡本目录写"实测"者，须按 A（厂商文件）/ B（第三方内核运行时）/ C（厂商模块）分开读，见 `08_kernel_provenance_audit.md`。
 
@@ -35,7 +37,9 @@
 | **`07_device_evidence.md`** | **真机证据登记：三件套解析、方法学限制、补采建议** |
 | **`08_kernel_provenance_audit.md`** | **来源审计：构建来源与安装范围、A/B/C 分类、模块代次核验、补丁间接影响、Stage 5 前置条件** |
 | `MANIFEST.md` | 文件清单、哈希、复核命令、UNKNOWN 台账、交付 vs 闭环状态 |
-| `tools/collect_device.sh` | **只读**设备采集脚本（不落地二进制） |
+| `tools/collect_device.sh` | **只读**设备采集脚本（首轮，adb 方式） |
+| **`tools/collect_stage4_p0.sh`** | **P0 最小只读采集（手机端，无需 adb）**：固件前 8 字节 + DDK 版本串；工具可用性自检；失败明确报因；版本串缺失输出 `NOT_FOUND` |
+| **`tools/README_stage4_p0.md`** | **手机执行指南**：aShell You 三种传脚本方式、执行命令、输出位置、判读表、失败排查、兜底命令 |
 
 ## 证据基础
 
@@ -76,8 +80,8 @@
 
 | 风险 | 说明 | 状态 |
 | --- | --- | --- |
-| **U4-01**（P0） | 原厂固件 header 实际值 | **8 字节可闭合**，见 §如何补齐证据 |
-| **U4-04**（P0） | DDK 自称 UK ABI / padding 清零 / props 严格校验 | 实体已在，缺版本串与反编译 |
+| **U4-01**（P0） | 原厂固件 header 实际值 | **补采工具已就绪**（`tools/collect_stage4_p0.sh`），**待执行**；输出回传前保持 UNKNOWN |
+| **U4-04**（P0） | DDK 自称 UK ABI / padding 清零 / props 严格校验 | **版本串**可由补采工具一次取；**padding / props 行为**仍需反编译或 `strace`（U4-14/15/16） |
 | **U4-10**（P0） | GPU 失败后是否 bootloop | 需同型机故障注入；`sw3d=0` 是风险信号 |
 | **U4-12**（P0） | R56p0 固件是否匹配 G925 MC12 | 需 Arm 固件实体 |
 | **U4-22**（P1，新） | `libged` 失效对 mapper/HWC 的传导 | 新识别的耦合面 |
@@ -85,19 +89,29 @@
 | **U4-25**（P1，新） | 第三方内核与原厂 boot 的运行时差异范围 | 同 GKI 提交，细节未测 |
 | `MEM_JIT_INIT` padding | 若 DDK 未清零 → tiler heap 不可用 → 可能渲染失败 | 待反编译 |
 
-## 如何补齐证据（最小化，3 条命令）
+## 如何补齐证据（手机端，无需电脑）
 
-```bash
-# U4-01：固件头 8 字节（关键：offset 4 = minor，offset 5 = major）
-adb shell "od -An -tx1 -N 8 /vendor/firmware/mali_csffw.bin"
+**推荐**：跑 `tools/collect_stage4_p0.sh`，一次输出两项。步骤见 `tools/README_stage4_p0.md`。
+
+```sh
+su -c 'sh /data/local/tmp/c.sh'
+```
+
+**兜底**（脚本传不上手机时，两条单行命令）：
+
+```sh
+# U4-01：固件前 8 字节（offset 4 = minor，offset 5 = major）
+su -c 'od -An -tx1 -N 8 /vendor/firmware/mali_csffw.bin'
 #   6e 3a f1 c3 03 00 …  → 0.3（首轮结论由推理升为实测）
 #   6e 3a f1 c3 04 00 …  → 0.4（首轮结论被推翻）
 
 # U4-04：DDK 自称版本（设备内 grep，不 pull 53 MB）
-adb shell "grep -a -o -m 3 -E 'UK version [0-9]+\.[0-9]+' /vendor/lib64/egl/mt6991/libGLES_mali.so"
-adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt6991/libGLES_mali.so"
+su -c 'grep -a -o -m 3 -E "UK version [0-9]+\.[0-9]+" /vendor/lib64/egl/mt6991/libGLES_mali.so'
+su -c 'grep -a -o -m 3 -E "r[0-9]{2}p[0-9]-[0-9a-z]+" /vendor/lib64/egl/mt6991/libGLES_mali.so'
 ```
 
+> 若环境有 adb（本项目当前用户没有），把 `su -c '…'` 换成 `adb shell "…"` 等效。
+>
 > **不要**用 `grep mali_csffw evidence.txt` 去"看 header minor"——首轮 `README` 就是这么写的，而任何 `ls`/`sha256sum`/`strings` 输出都**不含**那个字节。这是本轮修正的一处具体错误。
 >
 > 脚本与上述命令**均不 pull** 任何 `.so` / `.bin`。若需 blob 本体做 REA 分析，属用户自主决定，须先评估 `06_porting_design` 的合规风险登记。

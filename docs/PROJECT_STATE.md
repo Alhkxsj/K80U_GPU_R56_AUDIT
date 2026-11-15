@@ -6,9 +6,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最后更新 | 2026-11-15 22:40（GMT+8） |
-| 更新提交 | `docs: establish persistent agent context protocol` |
-| 提交前基准 HEAD | `b09cbb87ba88639cac1341b822a1ac2a69abab41`（`stage4: audit third-party GKI device evidence provenance`） |
+| 最后更新 | 2026-11-15 23:15（GMT+8） |
+| 更新提交 | `stage4: add minimal P0 device evidence collector` |
+| 提交前基准 HEAD | `0c1d1dd4c4b4ab9915b0cd94636f12d2fa4ac018`（`docs: establish persistent agent context protocol`） |
 | 分支 | `main` |
 | 精确 SHA 查询 | `git log -1 --format='%H %s'` |
 
@@ -64,8 +64,8 @@
 
 | ID | 内容 | 当前证据 | 闭合方式 |
 | --- | --- | --- | --- |
-| **U4-01** | 原厂 CSF 固件 header **实际字节**（offset 4/5） | 源码判据 r49p1=0.3 / r56p0=0.4 **[E1]**；仅 **[E2]** 启动一致性推理指向 0.3；三份采集**原理上**不含二进制头 | 读固件前 8 字节（只读，8 B） |
-| **U4-04** | 原厂 DDK **自身**宣称的 UK ABI / padding 是否清零 / props 是否严格校验 | 内核侧 1.30 已实测 **[D·B]**，但 DDK 侧无证据 | 2 条 `grep` 版本串（只读）+ 后续 `strace` |
+| **U4-01** | 原厂 CSF 固件 header **实际字节**（offset 4/5） | 源码判据 r49p1=0.3 / r56p0=0.4 **[E1]**；仅 **[E2]** 启动一致性推理指向 0.3；三份采集**原理上**不含二进制头 | 读固件前 8 字节（只读，8 B）——**工具已就绪（`05/tools/collect_stage4_p0.sh`），待用户执行** |
+| **U4-04** | 原厂 DDK **自身**宣称的 UK ABI / padding 是否清零 / props 是否严格校验 | 内核侧 1.30 已实测 **[D·B]**，但 DDK 侧无证据 | 版本串：**工具已就绪，待执行**；padding/props：仍需 `strace` 或反编译（U4-14/15/16） |
 | **U4-10** | GPU 初始化失败后是否 bootloop | 本机 `ro.vendor.mtk.gpu.sw3d=0`（无 CPU 3D 回退）是**风险信号**，非实证 | 故障注入（需可回滚环境，高风险） |
 | **U4-12** | R56p0 固件是否匹配 G925 MC12 | 无 R56p0 固件实体 | 取得 Arm 原包固件后比对 core mask / 型号字段 |
 
@@ -148,7 +148,7 @@
 | # | 任务 | 目标 | 风险 |
 | ---: | --- | --- | --- |
 | 1 | **建立并验证长期上下文规范**（本任务） | 让状态可从仓库恢复 | 无 |
-| 2 | **闭合 U4-01 + U4-04**（不重复已有采集） | 组合 B 判定升为实测；组合 C 前提落地 | 无（只读 8 B + 2 条 `grep`） |
+| 2 | **闭合 U4-01 + U4-04**：工具已就绪（`05/tools/collect_stage4_p0.sh`），**等待用户执行并回传输出** | 组合 B 判定升为实测；组合 C 前提落地 | 无（只读 8 B + 2 条 `grep`） |
 | 3 | 评估 U4-24 设备侧模块身份采集是否必要 | 决定 Stage 3 常量是否必须重导 | 无（只读元数据） |
 | 4 | 处理 U4-25 / U4-26 / U4-27 | 界定第三方内核差异面与 vendor 视图真实性 | 无（只读） |
 | 5 | **Stage 4 证据充分后**，再决定是否进入 Stage 5 | 设计 vs 定论分离 | — |
@@ -170,4 +170,5 @@
 | 日期 | 变更 |
 | --- | --- |
 | 2026-11-15 | 建立。基线 HEAD `b09cbb8`；记录阶段状态、Stage 4 的 27/4/3/4 计数、P0 明细、设备事实、技术债、已否决方案、任务队列 |
+| 2026-11-15 | **P0 补采工具就绪**（`stage4: add minimal P0 device evidence collector`）：新增 `05_userspace_firmware/tools/collect_stage4_p0.sh`（手机端只读采集，无 adb）与 `README_stage4_p0.md`（aShell You 执行指南）。**U4-01 / U4-04 状态未变（仍 UNKNOWN）**，待用户执行并回传 |
 | 2026-11-15 | 同轮修正 5 处 `Android 16` 过时表述（`00_reference`、`final_report`、`06_porting_design` 直接更正；`SOURCE_ACQUISITION`、`03_kbase_csf/06` 留痕加注），另 `03_kbase_csf/01` 补"其发布时的"限定。`00_reference/third_party/` 外部文档原文不改（D-014）。**技术结论未变** |

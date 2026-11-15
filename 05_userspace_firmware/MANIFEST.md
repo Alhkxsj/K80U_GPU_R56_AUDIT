@@ -57,8 +57,10 @@
 | 7 | **`07_device_evidence.md`** | 见下 | 见下 | 见下 | **新增**：真机证据登记与三件套解析（含来源前置） |
 | 8 | **`08_kernel_provenance_audit.md`** | 见下 | 见下 | 见下 | **新增**：第三方 GKI 环境下的设备证据来源审计 |
 | 9 | `README.md` | — | — | — | 交付说明 |
-| 10 | `tools/collect_device.sh` | 93 | 3,698 | `dac394480c017adb` | 只读采集脚本（首轮） |
-| 11 | `MANIFEST.md` | 本文件 | — | — | — |
+| 10 | `tools/collect_device.sh` | 93 | 3,698 | `dac394480c017adb` | 只读采集脚本（首轮，adb 方式） |
+| 11 | **`tools/collect_stage4_p0.sh`** | 284 | 11,547 | `b4083e0158748959` | **新增**：P0 最小只读采集（**手机端，无 adb**）；固件前 8 字节 + DDK 版本串；工具自检；失败报因 |
+| 12 | **`tools/README_stage4_p0.md`** | 218 | 7,353 | `75bc45daed260cd8` | **新增**：手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令） |
+| 13 | `MANIFEST.md` | 本文件 | — | — | — |
 
 > 行数 / 字节 / SHA256 由 `§4.11` 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
 
@@ -70,6 +72,7 @@
 | CSF 固件 `.bin` | **未采集、未入库**（仅登记路径/大小/SHA256） |
 | VINTF / init.rc | **未采集内容、未入库**（仅登记文件名与大小） |
 | 采集输出三件套 | **未入库**（仅登记哈希，见 §2.2） |
+| P0 补采输出（纯文本） | **未产生、未入库**；脚本只输出文本，不复制任何二进制（U4-01/U4-04 仍 UNKNOWN） |
 
 ### 2.2 设备采集输入登记（[D] 证据源）
 
@@ -342,9 +345,11 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 ├── 05_android_graphics_stack.md
 ├── 06_abi_compatibility_matrix.md
 ├── 07_device_evidence.md          # 真机证据登记（补充核验新增）
-├── 08_kernel_provenance_audit.md  # 来源审计（本轮新增）
+├── 08_kernel_provenance_audit.md  # 来源审计（来源审计轮新增）
 └── tools/
-    └── collect_device.sh          # 只读采集，不落地二进制
+    ├── collect_device.sh          # 只读采集，不落地二进制（首轮，adb）
+    ├── collect_stage4_p0.sh       # P0 最小采集（手机端，无 adb）
+    └── README_stage4_p0.md        # 手机执行指南与判读表
 ```
 
 **不设** `firmware/`、`userspace/` 等二进制存放目录——本阶段不采集二进制。
@@ -372,3 +377,4 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 | 2026-11-15 | v1.0 | 首次提交：6 份报告 + README + MANIFEST + 采集脚本。核心结论：固件硬不兼容（组合 B 否决）；用户态契约兼容（组合 C 候选） |
 | 2026-11-15 | **v1.1** | **补充核验**：整合三份真机采集（新增 `07`）；固件 header 由"实测 0.3"降级为"E2 推理 + U4-01 UNKNOWN"；Vulkan 存在性由 UNKNOWN 升级为已闭合；撤回"gralloc/mapper/HWC 免疫"；`min()` 语义由"校验"更正为"夹取"；新增 U4-22/U4-23；README 修正为 Android 17 / SDK 37 / kernel 6.6.143 |
 | 2026-11-15 | **v1.2** | **来源审计**（新增 `08`）：确认设备运行**第三方 GKI 内核**（KernelSU 补丁，`f9aa2fec`），非原厂 boot；建立 A/B/C 三类归属并重标 `01`/`07`/`06`；核验安装范围（仅 `boot`，`do.modules=0`，产物无 `.ko`/固件/`.so`）；判定设备 `.ko` 与仓库基线 `.ko` **非同一构建**（vermagic 118 vs 143）；定性补丁间接影响；新增 U4-24…U4-27（23→27 项）；增 [B]/[P] 两级证据与 `[D·A/B/C]` 细分 |
+| 2026-11-15 | **v1.3** | **P0 补采工具**（`stage4: add minimal P0 device evidence collector`）：新增 `tools/collect_stage4_p0.sh`（284 行，POSIX sh，只读，无 adb，工具自检，失败报因，版本串缺失输出 `NOT_FOUND` 而非 `INCOMPATIBLE`）与 `tools/README_stage4_p0.md`（218 行，aShell You 执行指南 + 判读表 + 兜底命令）。**仅为采集准备，U4-01 / U4-04 状态未变（仍 UNKNOWN）**；脚本已在 `dash`/`bash` 下通过语法检查并对 4 条分支做伪造文件演练，**未在真机运行** |
