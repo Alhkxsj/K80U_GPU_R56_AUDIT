@@ -94,6 +94,7 @@ K80U_GPU_R56_AUDIT/
 1. MTK 把 kbase 放在 `mali_avalon/mali-r49p1/` 下，但源码路径仍叫 `midgard/` —— 命名沿革，判断 CSF 能力要看代码不看目录名。
 2. ~~`vermagic` 写的是 `android15-8`，而目标系统是 Android 16 —— 需核实机型实际 KMI 分支，不能直接按字面推断。~~
    → **已澄清（2026-11-15 治理轮更正）**：`android15` 是 **GKI 分支名**，不是 Android 版本。设备 Android 为 **17 / SDK 37**，其 KMI 分支确为 `android15-8`（`uname -a` = `6.6.143-android15-8-gf9aa2fec23c3-4k`），两者不矛盾 **[D·B]**。原文保留以留痕（见 `docs/DECISION_LOG.md` D-012）。
+   → **2026-11-16 再补一条**：上面引用的 `uname -a` 是**第三方运行内核**（SukiSU-Ultra）。本机厂商模块的 vermagic 为 `6.6.118-android15-8-g54a15cf3acba-4k`，据此推定**原厂 boot 内核为 `6.6.118`**（[E2]）。因此"目标系统内核"这一说法本身要分三层，见 `05/08` §3.7.2。
 3. `arm,mali-valhall` 作为 `compatible` 用于 CSF 设备，说明 MTK 的 DTS 命名并未随架构换代而改变。
 
 ### 2.3 MT6991 内核参考仓库（⚠️ 部分获取）

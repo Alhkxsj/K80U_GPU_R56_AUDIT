@@ -47,7 +47,7 @@
 
 set -u
 
-VER="1.0"
+VER="1.1"
 
 # ---- 输出位置：优先 /data/local/tmp，退回 /sdcard/Download -------------------
 OUTDIR="${OUTDIR:-/data/local/tmp/gpu_audit_mod}"
@@ -129,7 +129,10 @@ done
 # =============================================================================
 sec "1. /proc/modules — GPU 链路模块（动态发现）"
 # 名字白名单：mali 系 / ged / MTK GPU 系 / MET GPU 系
-RE='^(mali_|ged$|mtk_gpu|mtk_gpufreq|mtk_ghpm|mtk_cg_peak|met_gpu|met_gpueb)'
+# v1.1 修正：原写法 `ged$` 放在 alternation 中间时 `$` 是字面量而非锚点，
+#            导致 `ged` 与 `ged.ko` 永远匹配不到（真机首跑时 §1 汇总为 13 而非 14）。
+#            去掉 `$` 后 `^ged` 可命中；当前模块名中没有以 `ged` 开头的其他模块，无副作用。
+RE='^(mali_|ged|mtk_gpu|mtk_gpufreq|mtk_ghpm|mtk_cg_peak|met_gpu|met_gpueb)'
 # 以下三项可在测试时用环境变量覆盖（真机不需要设置）
 PROCMOD="${PROCMOD:-/proc/modules}"
 SYSFS_ROOT="${SYSFS_ROOT:-/sys/module}"

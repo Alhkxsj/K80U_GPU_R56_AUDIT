@@ -318,7 +318,7 @@ MTK 把 GPUEB 的中断处理函数**注册进 ARM 的 reset 触发点表**。�
    >
    > **2026-11-15 23:20 再更新**：剩余缺口也已补采到位——固件 header 实测 **`0.3`**（U4-01 **闭合**，[D·A]），DDK release 串实测 **`r49p1-03bet0`**（U4-04 的版本代次闭合，padding / props 行为仍开放）。见 `05_userspace_firmware/07_device_evidence.md` §4.5 / §5.4。
 2. ~~**Android 16 内核树**~~ → **内核树代次**——现有 `bsp-dali-v-oss` 分支是 `android15-6.6`，与 K80U 的 ~~Android 16~~ 目标不符（见 `01_original_baseline/source_integrity.md` M3/U2）。
-   > **2026-11-15 更正**：设备实际为 **Android 17 / SDK 37**；`android15` 是 **GKI 分支名**，不是 Android 版本，故"分支名与 Android 版本不符"这一表述本身不成立 **[D·B]**。真正的代次差在 **GKI sublevel**：BSP 树为 `android15-6.6`，设备运行为 `6.6.143-android15-8-gf9aa2fec23c3`。问题**性质已澄清**，但"以哪棵树为底"仍是 Stage 5 的开放决策。
+   > **2026-11-15 更正**：设备实际为 **Android 17 / SDK 37**；`android15` 是 **GKI 分支名**，不是 Android 版本，故"分支名与 Android 版本不符"这一表述本身不成立 **[D·B]**。真正的代次差在 **GKI sublevel**：BSP 树为 `android15-6.6`，**原厂内核**应为 `6.6.118-android15-8-g54a15cf3acba`（由厂商 `.ko` vermagic 反推，`05/08` §3.1），**运行时内核**为第三方的 `6.6.143-android15-8-gf9aa2fec23c3`。问题**性质已澄清**，但"以哪棵树为底"仍是 Stage 5 的开放决策。
 3. **移植目标定位**——是"最小可点亮"（6 项）还是"完整可交付"（14 项）？两者工作量差 3–5 倍。
 
 ### 6.2 建议补做的三项分析（成本低、价值高）

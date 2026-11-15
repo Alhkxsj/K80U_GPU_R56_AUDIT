@@ -224,7 +224,9 @@ mtk_gpufreq_wrapper.ko        0
 `mali_mgm`（只吃 `emi`/`mtk_slbc`/`system_heap` 与 DT）与 `mali_prot_alloc`（只吃 `mtk_gpueb`/`mtk_gpufreq_wrapper`/`mtk_sec_heap`/`tmem_ffa` 与 DT）最典型——它们的 `UND` 里没有任何 kbase 符号，纯靠 DT 节点被 kbase 发现。
 
 **Q4：哪些模块可以原样保留（不重编、不改源）？**
-严格说**没有**：15 个 `.ko` 的 `__versions` 都锁定在 `6.6.118-android15-8-g57e634f35c1b-4k` 的符号 CRC 上，换内核即全部失效（`vermagic` 也含同一串）。若限定为"源码不改、只需重编"，则 **12 个**可以（第 5 章表格），`mali_prot_alloc` 也算（ops 表一致），`mali_mgm` 需改 1 个函数签名。
+严格说**没有**：**仓库基线** 15 个 `.ko` 的 `__versions` 都锁定在 `6.6.118-android15-8-g57e634f35c1b-4k` 的符号 CRC 上，换内核即全部失效（`vermagic` 也含同一串）。
+
+> **2026-11-16 补注**：仓库基线来自 **OS3.0.305.0**，而本机厂商模块来自 **OS4.0.3.0**，其 vermagic 为 `6.6.118-android15-8-g54a15cf3acba-4k`（同 sublevel、不同提交）。实测 18 个设备 `.ko` 后确认：14/15 个与仓库基线**字节数与关键节大小完全相同**，只有 kbase 实质不同（`05/08` §3.7）。因此"换内核即全部失效"仍成立，但"这些 `.ko` 的 CRC 与本机不符"这一条的强度下降——需先做一次 `__versions` 抽样比对（`05/08` §3.7.6）。若限定为"源码不改、只需重编"，则 **12 个**可以（第 5 章表格），`mali_prot_alloc` 也算（ops 表一致），`mali_mgm` 需改 1 个函数签名。
 
 **Q5：哪些模块必须修改才能与 r56p0 共存？**
 只有两个，且改动量差异极大：

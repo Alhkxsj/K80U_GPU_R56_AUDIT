@@ -55,7 +55,7 @@
 | commit | `f089d58cab670dc0d75db1203fa63850e57a940d` | `git rev-parse HEAD` |
 | 提交日期 / 说明 | 2025-09-19 / `dali open source` | `git log -1` |
 | 克隆方式 | `--depth 1 --filter=blob:none --no-checkout` | `git rev-parse --is-shallow-repository` → `true` |
-| 文件总数 | **82,279** | `git ls-tree -r --name-only HEAD | wc -l` |
+| 文件总数 | **82,279** | `git ls-tree -r --name-only HEAD \| wc -l` |
 | 目录数 | 5,346 个对象（含 1 commit + 全部 tree） | `git count-objects -v` → `in-pack: 5346` |
 
 **是否为完整 Linux 内核源码树**：是。顶层 25 个目录 `Documentation LICENSES android arch block certs crypto drivers fs include init io_uring ipc kernel lib mm net rust samples scripts security sound tools usr virt`，含 `Makefile`、`Kconfig`、`Kbuild`、`rust/`、`android/abi_gki_aarch64*`，是标准 Android GKI 形态。`[实证]`
@@ -84,7 +84,7 @@
 | --- | --- | --- |
 | 分支 | `bsp-dali-v-oss` | `git rev-parse --abbrev-ref HEAD` |
 | commit | `e45c3199537fbba9aae5fb06c31fc8dbd3c1dcee` | `git rev-parse HEAD` |
-| 文件总数 | 11,619 | `git ls-tree -r --name-only HEAD | wc -l` |
+| 文件总数 | 11,619 | `git ls-tree -r --name-only HEAD \| wc -l` |
 | 对象数 | 1,540 | `git count-objects -v` |
 
 **性质**：不是完整内核树，是**设备模块树**。`drivers/` 10,348、`sound/` 572、`arch/` 307、`include/` 231、`kernel/` 63；`mm/`、`net/`、`fs/` 等核心子系统缺失（`drivers/mm` = 0）。`[实证]`
@@ -398,6 +398,17 @@ R2 `gpu/gpu_mali/mali_avalon/` 下并存 6 个 DDK 版本：
 | U4 | `mtk_gpu_power_throttling.ko` 与 `cg_ppt` 的精确对应 | 命名不一致，未见 Makefile 显式映射 |
 | U5 | R2 tarball 与 GitHub 分支是否逐字节等价 | 无 git 元数据，仅 SHA256 可查 |
 | U6 | 3 个 `met_*` 模块的源码对应 | 目录存在但未逐文件核对 Makefile 目标名 |
+
+> **后续观测（2026-11-16 追加；本目录正文冻结，只增不改）**
+>
+> | # | 原状态 | 现状态 | 依据 |
+> | --- | --- | --- | --- |
+> | **U1** | 目标机内核是否真为 6.6.118 | **✅ 已闭合**：**是**，具体为 `6.6.118-android15-8-g54a15cf3acba-4k` | 设备 18 个厂商 `.ko` 的 `vermagic` 全部为该串（`05/07` §3.5、`05/08` §3.7.2）。注意：这是**原厂 boot 的推断值** [E2]；运行时内核已被替换为第三方 `6.6.143-…-gf9aa2fec23c3` |
+> | **U2** | 目标机是否 Android 16 且运行 android15-6.6 | **✅ 已闭合**：Android **17 / SDK 37**；GKI 分支 `android15-8`（`android15` 是分支名，非 Android 版本） | 真机 `getprop`（`05/07` §2） |
+>
+> **另注（2026-11-16）**：本轮修正了 §2、§3 表格中两处 `` `git ls-tree … | wc -l` `` 的管道符转义（原写法会让 GFM 表格断行）。**只改格式，不改任何数值与结论。**
+>
+> **同时需要更正本目录的一个隐含前提**：`01_original_baseline/` 的 `.ko` 取自社区镜像声明的 `OS3.0.305.0.WONCNXM`，其 vermagic 为 `6.6.118-android15-8-**g57e634f35c1b**`；而本机（`OS4.0.3.0`）模块为 `6.6.118-android15-8-**g54a15cf3acba**`。**同 sublevel、不同提交**——所以"6.6.118"这个判断成立，但"基线 `.ko` = 本机 `.ko`"不成立。
 
 ---
 

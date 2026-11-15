@@ -20,12 +20,15 @@
 | TASK 04 来源审计基线 | `a5b9a51` → 提交 `stage4: audit third-party GKI device evidence provenance` |
 | TASK 04 P0 补采工具基线 | `0c1d1dd` → 提交 `stage4: add minimal P0 device evidence collector`（`65006de`） |
 | TASK 04 P0 补采整合基线 | `65006de` → 提交 `stage4: close U4-01 with firmware header bytes, advance U4-04` |
-| TASK U4-24 采集工具基线 | `e3d7bc0` → 提交 `stage4: add GPU module identity audit`（**工具就绪，未在真机运行**） |
+| TASK U4-24 采集工具基线 | `e3d7bc0` → 提交 `stage4: add GPU module identity audit`（`b1da0b9`，工具就绪） |
+| TASK U4-24 实测整合基线 | `b1da0b9` → 提交 `stage4: close U4-24a with device module identity`（**已回传，18 个文件身份闭合**） |
 | 设备运行时内核 | **第三方 GKI 构建**（KernelSU 补丁；GKI `android15-6.6`，源码提交 `f9aa2fec23c3…`，sublevel 143，patch `2026-10`）**[D·B]**+**[B]** |
 | 设备 ROM | HyperOS `OS4.0.3.0.XONCNM` / Android 17 / SDK 37 **[D·A]** |
 | 原厂基线 | `mali-r49p1-03bet0`（CSF UK ABI **1.30**）——真机 `/sys/module/.../version` 已实测一致 **[D]** |
 | 目标基线 | `mali-r56p0-18eac0`（CSF UK ABI **1.39**） |
-| 内核参照 | Linux **6.6.143-android15-8-gf9aa2fec23c3-4k**（真机 `uname -a`） |
+| 运行内核（第三方） | Linux **6.6.143-android15-8-gf9aa2fec23c3-4k**（真机 `uname -a`；`chandr1000@SukiSU-Ultra-v41181`）**[D·B]** |
+| **原厂内核（推定）** | Linux **6.6.118-android15-8-g54a15cf3acba-4k**（由 18 个厂商 `.ko` vermagic 反推）**[E2]** |
+| **仓库基线内核** | Linux **6.6.118-android15-8-g57e634f35c1b-4k**（OS3.0.305.0）**[E1]** |
 | 系统 | **Android 17 / SDK 37**，HyperOS `OS4.0.3.0.XONCNM`（真机 `ro.build.*`） |
 
 ### 1.1 证据边界声明（本轮更新）
@@ -63,7 +66,7 @@
 | 10 | `tools/collect_device.sh` | 93 | 3,698 | `dac394480c017adb` | 只读采集脚本（首轮，adb 方式） |
 | 11 | **`tools/collect_stage4_p0.sh`** | 284 | 11,547 | `b4083e0158748959` | **新增**：P0 最小只读采集（**手机端，无 adb**）；固件前 8 字节 + DDK 版本串；工具自检；失败报因 |
 | 12 | **`tools/README_stage4_p0.md`** | 234 | 8,547 | `001e85e8e235ad1b` | 手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令）+ **本机执行结果摘要** |
-| 13 | **`tools/collect_gpu_module_identity.sh`** | 396 | 17,644 | `d6ff5a2c0efebad2` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、无 `modinfo` 依赖、路径多根搜索、压缩/内建降级判定） |
+| 13 | **`tools/collect_gpu_module_identity.sh`** | 399 | 17,967 | `356175c51c874af3` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、路径多根搜索、压缩/内建降级判定）。**v1.1 修正 `ged$` 正则失效**（`08` §3.7.7） |
 | 14 | **`tools/README_gpu_module_identity.md`** | 199 | 9,217 | `2238d43031af3108` | **新增**：手机执行指南 + 三行核心判读表 + `lsmod` 尺寸口径说明 + 兜底命令 + 失败排查 |
 | 15 | `MANIFEST.md` | 本文件 | — | — | — |
 
@@ -78,7 +81,7 @@
 | VINTF / init.rc | **未采集内容、未入库**（仅登记文件名与大小） |
 | 采集输出三件套 | **未入库**（仅登记哈希，见 §2.2） |
 | P0 补采输出（纯文本） | **已产生、未入库**：设备端 `/data/local/tmp/gpu_audit_p0/stage4_p0_20261115_232021.txt`，仅登记其内容摘要（§2.3）；**U4-01 已闭合 / U4-04 部分闭合** |
-| U4-24 模块身份输出（纯文本） | **尚未产生**。脚本会把结果写到设备端 `/data/local/tmp/gpu_audit_mod/stage4_mod_<ts>.txt`；回传后只登记摘要与哈希，**不登记正文**，**不含任何 `.ko`** |
+| U4-24 模块身份输出（纯文本） | **已产生、未入库**：设备端 `/data/local/tmp/gpu_audit_mod/stage4_mod_20261116_000412.txt`，仅登记摘要（§2.4）；**U4-24a 已闭合 / b 开放**，**不含任何 `.ko`** |
 
 ### 2.2 设备采集输入登记（[D] 证据源）
 
@@ -102,6 +105,21 @@
 | 工具可用性 | `od` YES · `xxd` YES · `strings` YES · `readelf` YES · `hexdump` **NO** |
 | **关键读数** | 固件前 8 字节 `6e 3a f1 c3 03 00 00 00` → **header 0.3**；DDK `r49p1-03bet0` |
 | 入库内容 | 仅上述文本摘要；**无任何二进制** |
+
+### 2.4 模块身份采集登记（2026-11-16 00:04）
+
+| 项 | 值 |
+| --- | --- |
+| 文件 | `stage4_mod_20261116_000412.txt`（设备侧 `/data/local/tmp/gpu_audit_mod/`） |
+| 生成方式 | `tools/collect_gpu_module_identity.sh` **v1.1**，POSIX sh，只读，无 adb |
+| 采集时间 | 2026-11-16 00:04:12 CST |
+| 设备 / 运行内核 | `25060RK16C` / `dali`，Android 17 (SDK 37)，`6.6.143-android15-8-gf9aa2fec23c3-4k`（第三方） |
+| 环境标记 | `u:r:ksu:s0`，UID 0 |
+| 工具可用性 | `sha256sum`·`od`·`xxd`·`strings`·`readelf`·`modinfo`·`lsmod`·`stat` 全部存在 |
+| 自检 | `CANDIDATES 25 / LOADED 15 / FILE_FOUND 18 / HASHED 18 / NOT_READABLE 0 / NOT_FOUND 7` |
+| **关键读数** | 18 个 `.ko` 的 vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；`ged.ko` = 1,093,352 B / `e4ff2a35e3019a97…`；kbase = 2,328,064 B / `ad0e0ff25a2918a2…` |
+| 入库内容 | 仅上述文本摘要；**无任何 `.ko`**（工具声明 `NO_BINARY`） |
+| 已知工具缺陷 | v1.0 的 §1 汇总正则 `ged$` 在 alternation 内失效，漏计 `ged`（13 而非 14）；**v1.1 已修**，§4 逐模块数据不受影响（`08` §3.7.7） |
 
 ---
 
@@ -311,7 +329,7 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 三份采集输出 | 设备 `/sdcard/GPU_AUDIT_STAGE4/` | 完整副本，已登记哈希 |
 | **第三方内核构建记录** | `GKI_KernelSU_SUSFS` Actions run `43629124514`（公开页） | **完整**（矩阵参数、产物清单、模板源码）；**不代表设备字节** |
 | **AnyKernel3 模板** | `WildKernels/AnyKernel3 @ gki-2.0` 的 `anykernel.sh` | **完整**（`block=boot` / `do.modules=0` / `do.systemless=0`） |
-| 设备侧 GPU `.ko` 实体 | `/vendor_dlkm`（或 `/vendor/lib64/modules`） | **未采集**（仅装载状态 + 版本串） |
+| 设备侧 GPU `.ko` 实体 | `/vendor_dlkm/lib/modules/`（`/vendor/lib/modules/` 为同内容挂载副本） | **未采集二进制**；已取 18 个文件的路径/大小/SHA256/vermagic/srcversion（§2.4、`07` §3.5） |
 
 ### 5.1 方法学陷阱（累计，含本轮新增）
 
@@ -327,14 +345,17 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | **依赖 ≠ 会崩** | 撤"免疫"时反向过冲为"ged 装载失败" | 回查 TASK 03 反依赖定理：`ged→kbase` 为 0，故只能推"降级" |
 | **协商 ≠ 校验** | 把 `min()` 当成版本校验 | 读 `kbase_api_handshake` 全文（`03` §1.5） |
 | **实测 ≠ 原厂实测** | 把 B 类（第三方内核运行时）写成"原厂内核实测" | 查 `u:r:ksu:s0` + 安装范围（`08` §2.5） |
-| **装载 ≠ 同源** | 把"12 个 `.ko` 已装载"写成"仓库 12 个 `.ko` 已装载" | vermagic `6.6.118` vs 运行内核 `6.6.143`（`08` §3.4） |
+| **装载 ≠ 同源** | 把"15 个 `.ko` 已装载"写成"仓库 15 个 `.ko` 已装载" | 设备 vermagic `6.6.118-…-g54a15cf3acba` vs 仓库 `6.6.118-…-g57e634f35c1b`（`08` §3.7） |
+| **装载 ≠ 兼容**（本轮新增） | 把"模块装载成功"当作"ABI 兼容" | 该内核**绕过 `same_magic()`**：串不符仍装载（`08` §3.7.4） |
+| **同大小 ≠ 同文件**（本轮新增） | 看到 `ged.ko` 两侧同为 1,093,352 B 就认为同源 | SHA256 不同；vermagic 等长替换不改文件长度（`08` §3.2） |
+| **三个内核版本**（本轮新增） | 只写"设备内核 6.6.143" | 运行/原厂/仓库基线三者不同（`08` §3.7.2） |
 | **补丁 ≠ 改 GPU 驱动** | 把第三方调度/调频补丁的影响写成"GPU 驱动被改" | GKI `common/` 不含 mali，补丁结构上改不到（`08` §4.1） |
 
 ---
 
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项，闭合 5 项，部分闭合 3 项）
+### 6.1 UNKNOWN 汇总（27 项，闭合 5 项，部分闭合 **4** 项）
 
 | 优先级 | ID | 内容 | 状态 |
 | --- | --- | --- | --- |
@@ -348,8 +369,8 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | P1 | U4-15 | DDK 对 props 新 ID 的处理 | 开放 |
 | P1 | U4-17 | 薄壳 `api_version` / 加载机制 | 开放 |
 | P1 | **U4-22** | `libged` 失效对 mapper/HWC 的传导 | **新增开放** |
-| P1 | **U4-24** | 设备侧 GPU `.ko` 的路径 / 文件大小 / SHA256 / vermagic / srcversion（a）；`__ksymtab` CRC 与 kCFI 常量（b） | **a：工具已就绪、待执行**；**b：未开始**（已证"非仓库构建"，见 `08` §3.6） |
-| P1 | **U4-25** | 第三方内核与原厂 boot 的运行时差异范围 | **新增开放** |
+| P1 | **U4-24** | 设备侧 GPU `.ko` 的路径 / 文件大小 / SHA256 / vermagic / srcversion（a）；`__ksymtab` CRC 与 kCFI 常量（b） | **a：✅ 已闭合**（18 个文件全取，`07` §3.5）；**b：开放**，范围收窄至 kbase（`08` §3.7.6） |
+| P1 | **U4-25** | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否被绕过） | **新增开放**（已确认 `same_magic` 被绕过，见 `08` §3.7.4） |
 | P2 | **U4-26** | 设备当前 boot 是否即所链接 run 的产物 | **新增开放**（时间戳不可判） |
 | P2 | **U4-27** | `/vendor` 是否被 KSU/NoMount overlay 覆盖 | **新增开放**（未采 mount 表） |
 | P2 | U4-06/07/16/19/20/21 | 见各章 | 部分闭合 |
@@ -424,3 +445,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-15 | **v1.3** | **P0 补采工具**（`stage4: add minimal P0 device evidence collector`）：新增 `tools/collect_stage4_p0.sh`（284 行，POSIX sh，只读，无 adb，工具自检，失败报因，版本串缺失输出 `NOT_FOUND` 而非 `INCOMPATIBLE`）与 `tools/README_stage4_p0.md`（218 行，aShell You 执行指南 + 判读表 + 兜底命令）。**仅为采集准备，U4-01 / U4-04 状态未变（仍 UNKNOWN）**；脚本已在 `dash`/`bash` 下通过语法检查并对 4 条分支做伪造文件演练，**未在真机运行** |
 | 2026-11-15 | **v1.4** | **P0 补采执行与整合**（`stage4: close U4-01 with firmware header bytes, advance U4-04`）：用户回传 `stage4_p0_20261115_232021.txt`。**U4-01 闭合**：固件前 16 字节 `6e 3a f1 c3 03 00 00 00 00 00 0a 03 00 00 00 00`，header **0.3**（§2.3、`07` §4.5）。**U4-04 部分闭合**：DDK 内含 `r49p1-03bet0`，与 kbase `MODULE_VERSION` 同串 → 原厂三方配套（`07` §5.4）。组合 B 由「[E1]+[E2] 推理否决」升为「[E1]+[D·A] 实测否决」。计数 27/4/3/4 → **27/5/3/3**。新增 D-016 / D-017，D-008 转为生效。**新增两条禁止表述**：`version_hash` ≠ GLB 版本；"DDK 实测宣称 1.30"（应为 release 映射） |
 | 2026-11-15 | **v1.5** | **U4-24 采集工具 + 三处口径更正**（`stage4: add GPU module identity audit`）：新增 `tools/collect_gpu_module_identity.sh`（396 行，POSIX sh，只读，无 adb，路径多根搜索，缺工具输出 `NOT_AVAILABLE`）与 `tools/README_gpu_module_identity.md`（199 行）。`08` 新增 **§3.6**（U4-24 判定矩阵、模块集合映射、kCFI/CRC 重导依赖分类、子项 a/b 拆分）；修正三处口径：①`lsmod` size 是 `core_layout.size` 非文件大小（取消"差 409 KB"的相减表述）②设备多出 `mtk_ghpm`，仓库无此文件，集合不对称 ③`met_*`「未装载」受筛选口径限制。**计数不变（27/5/3/3），U4-24 仍未闭合** |
+| 2026-11-16 | **v1.6** | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户执行 `collect_gpu_module_identity.sh` 并回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**（路径/大小/SHA256/vermagic/srcversion/sysfs Build ID），vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；②**发现三层内核版本**：运行 `6.6.143-gf9aa2fec23c3`（第三方）／原厂推定 `6.6.118-g54a15cf3acba`／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）——**此前把 6.6.143 当"设备内核"是错的**；③**14/15 模块字节数与 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**；④**发现运行内核绕过 vermagic 校验**（15 个模块串不符仍装载）→ "装载成功"不再构成 ABI 证据；⑤"`ged` 差 409 KB"**彻底作废**（两侧文件同为 1,093,352 B）；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm`/`mtk_cg_peak_power_throttling`/`mtk_smmu_qos`）；⑦修脚本 v1.1 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**（U4-24 转入部分闭合，P0 不变） |

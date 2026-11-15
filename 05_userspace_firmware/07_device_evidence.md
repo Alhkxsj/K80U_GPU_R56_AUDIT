@@ -36,13 +36,13 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 做 | 解析三份真机采集输出；把可公开元数据（路径/大小/SHA256/Build ID/动态段/服务状态）整合进 `01`–`06`；复核首轮的五处过度推断；修正根 `README.md` |
+| 做 | 解析四份真机采集输出（三份基线 + P0 + 模块身份）；把可公开元数据（路径/大小/SHA256/Build ID/动态段/服务状态/模块身份）整合进 `01`–`06`；复核首轮的五处过度推断；修正根 `README.md` |
 | 不做 | 不重新执行 Stage 4；不开始 Stage 5；不编译；不替换任何固件或系统库；不上传任何 `.so` / `.bin` / `.ko` 实体；不要求用户重跑已有采集项目 |
-| 唯一例外 | 若存在**可被 8 字节读数直接闭合**的 P0 缺口，提出最小只读命令并等待用户确认（见 §10）。**该例外已于 2026-11-15 23:20 执行完毕**：用户运行 `tools/collect_stage4_p0.sh` 并回传纯文本，未上传任何二进制 |
+| 唯一例外 | 若存在**可被少量只读命令直接闭合**的缺口，提出最小命令并等待用户确认（见 §10）。**已执行两次**：2026-11-15 23:20（P0：固件头 + DDK 版本串）、2026-11-16 00:04（模块身份）。两次均为纯文本回传，未上传任何二进制 |
 
 ---
 
-## 1. 输入登记（三份基线采集 + 一份 P0 补采）
+## 1. 输入登记（三份基线 + P0 补采 + 模块身份）
 
 ### 1.0 三份基线采集（2026-11-15 20:56 收到）
 
@@ -63,7 +63,7 @@
 | 项 | 值 |
 | --- | --- |
 | 设备 / 代号 | `25060RK16C` / `dali` |
-| Android / 内核 | 17 (SDK 37) / `6.6.143-android15-8-gf9aa2fec23c3-4k` |
+| Android / 运行内核（第三方） | 17 (SDK 37) / `6.6.143-android15-8-gf9aa2fec23c3-4k` |
 | SELinux / UID | `u:r:ksu:s0` / 0 |
 | 工具可用性 | `od` YES · `xxd` YES · `strings` YES · `readelf` YES · **`hexdump` NO** |
 | 输出位置 | `/data/local/tmp/gpu_audit_p0/stage4_p0_20261115_232021.txt`（设备本地） |
@@ -71,7 +71,26 @@
 
 > 该文件的作用只有一个：**把 U4-01 从推理变为读数**。它在 §1.1 是登记项，在 §4.5 是证据正文。
 
-### 1.2 三份基线采集各自的能力边界
+### 1.2 模块身份采集（2026-11-16 00:04 收到，**闭合 U4-24a**）
+
+| 文件 | 采集时间 | 生成方式 | 内容 |
+| --- | --- | --- | --- |
+| `stage4_mod_20261116_000412.txt` | `2026-11-16 00:04:12 CST` | 设备端执行 `05_userspace_firmware/tools/collect_gpu_module_identity.sh` v1.1（POSIX sh，只读，无 adb） | 25 个候选名 → 18 个文件：路径 / 大小 / SHA256 / vermagic / `.modinfo` / 关键节大小 / sysfs 运行时视图 |
+
+| 项 | 值 |
+| --- | --- |
+| 设备 / 代号 | `25060RK16C` / `dali` |
+| 指纹 | `Redmi/dali/dali:17/CP2A.260605.016/OS4.0.3.0.XONCNM:user/release-keys` |
+| Android / 运行内核 | 17 (SDK 37) / `6.6.143-android15-8-gf9aa2fec23c3-4k`（**第三方**，`chandr1000@SukiSU-Ultra-v41181`） |
+| SELinux / UID | `u:r:ksu:s0` / 0 |
+| 工具可用性 | `sha256sum`·`od`·`xxd`·`strings`·`readelf`·`modinfo`·`lsmod`·`stat` 全部存在（`/system/bin/`） |
+| 自检 | `CANDIDATES 25 / LOADED 15 / FILE_FOUND 18 / HASHED 18 / NOT_READABLE 0 / NOT_FOUND 7` |
+| 输出位置 | `/data/local/tmp/gpu_audit_mod/stage4_mod_20261116_000412.txt`（设备本地） |
+| 回传形态 | **纯文本**；`NO_BINARY` 声明未复制/压缩/导出/上传任何 `.ko` |
+
+> 该文件的作用：**把 U4-24a 从"工具就绪"变为"18 个文件的真实身份"**。台账见 §3.5，与仓库基线的逐项对照与判定见 `08` §3.7。
+
+### 1.3 三份基线采集各自的能力边界
 
 | 文件 | 能回答 | 不能回答 |
 | --- | --- | --- |
@@ -96,8 +115,9 @@
 | **SDK** | **37** | 采集 §1 第 6 行 |
 | 构建指纹 | `Redmi/dali/dali:17/CP2A.260605.016/OS4.0.3.0.XONCNXM:user/release-keys` | 采集 §1 第 7 行 |
 | 系统版本名 | HyperOS `OS4.0.3.0.XONCNXM` | 同上 |
-| 内核（**第三方 GKI**） | `6.6.143-android15-8-gf9aa2fec23c3-4k`，`#1 SMP PREEMPT Mon Oct 5 04:20:00 UTC 2026 aarch64` | `uname -a` |
-| 内核来源判定 | **第三方构建**：SELinux 域 `u:r:ksu:s0`（KernelSU 补丁内核） | 采集文件 `id` 输出 |
+| 内核（**第三方 GKI**，运行时） | `6.6.143-android15-8-gf9aa2fec23c3-4k`，`#1 SMP PREEMPT Mon Oct 5 04:20:00 UTC 2026 aarch64`（`chandr1000@SukiSU-Ultra-v41181`） | `uname -a` / `/proc/version` |
+| **原厂内核（推定）** | `6.6.118-android15-8-g54a15cf3acba-4k` | **由 18 个厂商 `.ko` 的 vermagic 反推**（§3.5），[E2] |
+| 内核来源判定 | **第三方构建**：SELinux 域 `u:r:ksu:s0`（KernelSU 补丁内核）+ 构建者串 `chandr1000@SukiSU-Ultra-v41181` | 采集文件 `id` 输出 + `uname -a` |
 | 内核基线 | Google GKI `android15-6.6`，源码提交 `f9aa2fec23c3…`，sublevel 143，patch `2026-10` | `[B]` 构建运行页 + `[D·B]` `uname` 双向吻合 |
 | GPU 节点 | `/soc/mali@48000000`，`compatible = mediatek,mali` + `arm,mali-valhall` | `uevent` |
 | 设备节点 | `/dev/mali0`，`crw-rw-rw- system graphics 10:282` | `ls -l /dev` |
@@ -106,9 +126,11 @@
 >
 > **四处必须纠正的旧表述**：
 > 1. 根 `README.md` 的 **"Android 16"已过时**——真机为 **Android 17 / SDK 37**。
-> 2. 内核串里的 `android15` 是 **GKI 分支名**（`android15-8`），**不是** Android 版本；`6.6.143` 才是内核版本。旧文写作"Linux 6.6（GKI 形态）"方向正确但不够精确。
+> 2. 内核串里的 `android15` 是 **GKI 分支名**（`android15-8`），**不是** Android 版本；`6.6.143` 是**运行时内核**（第三方）的 sublevel。旧文写作"Linux 6.6（GKI 形态）"方向正确但不够精确。**原厂内核的 sublevel 是 118**，见上表"原厂内核（推定）"行。
 > 3. `compatible` 为 `arm,mali-valhall`（Valhall 家族字符串），与 Immortalis-G925 属同一 `regmap` 世代，和 `03_kbase_csf/05` 的 `kbase_regmap_v12_init` 判定一致 **[E2]**。
-> 4. **内核不是原厂的**。`uname` 串与原厂 boot 完全相同（两者都基于同一 GKI 提交 `f9aa2fec`），**因此 `uname` 无法区分**；决定性判据是 `u:r:ksu:s0`——该 SELinux 域只在 KernelSU 补丁内核上存在。凡本文写"内核侧"者，一律指**第三方内核**。
+> 4. **内核不是原厂的**。`u:r:ksu:s0` 只在 KernelSU 补丁内核上存在；`/proc/version` 里的构建者串 `chandr1000@SukiSU-Ultra-v41181` 进一步坐实。
+>
+>    **2026-11-16 更正（原文此处是错的）**：上一版写"`uname` 串与原厂 boot 完全相同（两者都基于同一 GKI 提交 `f9aa2fec`），因此 `uname` 无法区分"。这是**错误假设**。实测表明原厂 boot 的内核应为 `6.6.118-android15-8-g54a15cf3acba`（由 18 个厂商模块的 vermagic 反推），与运行内核 `6.6.143-android15-8-gf9aa2fec23c3` **在 sublevel 与提交号上都不同**——`uname` 完全可以区分，而且是最直接的区分手段之一。原文把"构建矩阵标签"当成了"原厂内核提交"，属证据串位。
 
 ---
 
@@ -141,7 +163,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | 运行中的 kbase 版本 | `r49p1-03bet0` | **[D·C]** |
 | 运行中的 kbase UK ABI | **1.30（major 1 / minor 30）** | **[D·C]** |
 | 与仓库基线**源码标签**一致 | 与 `01_original_baseline` 的 `MALI_RELEASE_NAME` 逐字符一致 | **[D·C]**+[E1] |
-| 与仓库基线**二进制**一致 | **否**——vermagic `6.6.118-…` ≠ 运行内核 `6.6.143-…`，见 §3.4 | **[E1]**+[E2] |
+| 与仓库基线**二进制**一致 | **否**——设备模块 vermagic `6.6.118-…-g54a15cf3acba` ≠ 仓库 `6.6.118-…-g57e634f35c1b`，见 §3.4 | **[D·A]**+[E1] |
 
 > 这是 Stage 4 首轮**拿不到、只能推测**的东西：首轮说"原厂 DDK 必然宣称 1.30"是源码推理 **[E1]**，而现在有设备侧字符串直接确认**内核**就是 1.30。
 >
@@ -158,7 +180,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | `mali_kbase_mt6991_r49` | ✅ 已装载 | refcount 77 |
 | `mali_mgm_mt6991_r49` | ✅ | |
 | `mali_prot_alloc_mt6991_r49` | ✅ | PMA |
-| `ged` | ✅ | 设备侧 `lsmod` 报 **684,032 B** 运行时内存（**不是文件大小**，仓库文件为 **1,093,352 B**；口径差异见 `08` §3.6.2）；被 5 个模块引用 |
+| `ged` | ✅ | 设备文件 **1,093,352 B**（与仓库**完全相同**）；`lsmod` 另报 684,032 B 运行时内存，两者**不可混用**（`08` §3.6.2）；被 5 个模块引用 |
 | `mtk_gpufreq_mt6991` | ✅ | |
 | `mtk_gpufreq_wrapper` | ✅ | 被 9 个模块引用（含 kbase） |
 | `mtk_gpueb` | ✅ | 被 10 个模块引用（含 kbase） |
@@ -176,7 +198,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 > **两条口径补正（2026-11-15 U4-24 准备轮）**：
 >
 > 1. **"未装载"的观测口径**：上表依据的是 `lsmod | grep -iE "mali|gpu|ged|gpueb|gpufreq"` 的**过滤输出**。`met_gpu_*` 含 `gpu`，会被该模式命中；未出现即"未装载"。严格说是"在该筛选口径下未见"，全量 `/proc/modules` 采集可把它升级为"确认"（见 `08` §2.4 注 2）。
-> 2. **集合不对称**：设备除上表 12 个已装载模块外，还有 **`mtk_ghpm`**（被 `mtk_gpufreq_wrapper` 引用），而仓库 `vendor_dlkm/` **没有这个文件**。故"仓库 15 个 = 设备 15 个"不成立，详见 `08` §3.6.3。
+> 2. **集合不对称**：设备除上表 12 个已装载模块外，还有 **3 个仓库没有的文件**——`mtk_ghpm`（45,528 B，被 `mtk_gpufreq_wrapper` 引用）、`mtk_cg_peak_power_throttling`（107,384 B）、`mtk_smmu_qos`（206,920 B）。故"仓库 15 个 = 设备 15 个"不成立；设备实为 **18 个文件 / 15 个已装载**，详见 `08` §3.7.5。
 
 ### 3.3 引用方向：设备侧交叉印证 TASK 03 的"89 处正向引用"
 
@@ -186,22 +208,107 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 >
 > 注意：`lsmod` 只能证明"谁引用谁"这一层，**不能**给出符号粒度，也不能反驳"MTK 对 kbase 零反向依赖"定理（该定理的依据是 `__ksymtab` 与 `UND` 符号，仍以 `04_mtk_platform/01` 为准）。
 
-### 3.4 设备 `.ko` 与仓库 `.ko` **不是同一份二进制**（本轮新增）
+### 3.4 设备 `.ko` 与仓库 `.ko`：**不同构建，但差异面极小**（2026-11-16 实测重写）
 
-| 判据 | 仓库基线 15 个 `.ko` | 设备运行内核 / 模块 | 结论 |
+| 判据 | 仓库基线 15 个 `.ko`（OS3.0.305.0） | 设备 18 个 `.ko`（OS4.0.3.0） | 结论 |
 | --- | --- | --- | --- |
-| vermagic（**决定性**） | `6.6.118-android15-8-g57e634f35c1b-4k SMP preempt mod_unload modversions aarch64` | 内核 `6.6.143-android15-8-gf9aa2fec23c3-4k` | **不相等 → 基线 `.ko` 无法装载到当前内核** |
-| `ged` 尺寸（**辅助，口径不同**） | 文件 **1,093,352 B** | `lsmod` 运行时 **684,032 B**（`core_layout.size`，167 页） | 方向一致（设备侧更小），但**两者不可相减**，见 `08` §3.6.2 |
-| `modversions` | 开启（vermagic 含 `modversions`） | 开启 | `.ko` 与内核版本串必须逐字符相等 |
+| vermagic（**决定性**） | `6.6.118-android15-8-**g57e634f35c1b**-4k …` | `6.6.118-android15-8-**g54a15cf3acba**-4k …` | **同 sublevel、不同提交 → 不是同一构建** |
+| 运行内核 | — | `6.6.143-android15-8-gf9aa2fec23c3-4k`（第三方） | 与两者都不等；**装载成功说明校验被绕过** |
+| 文件字节 | 15 个 | 18 个 | **14 个两侧完全相同**；仅 kbase +17,640 B；3 个仓库无 |
+| `.text` 节 | 见 `08` §3.7.1 | 同上 | **14 个逐字节相等**；kbase 差 6,788 B |
+| `__versions` 节 | 同上 | 同上 | **14 个逐字节相等**；kbase 513 vs 514 条 |
+| `srcversion` | `mali_mgm` `568D03DB…`、`mali_prot_alloc` `D3B1B48B…` | **逐字符相同** | 这两模块**源码未变** |
+| `srcversion` | `mali_kbase` `9E8156B9…` | `CAC308B0…` | kbase **源码已变** |
+| `ged` 尺寸 | 文件 **1,093,352 B** | 文件 **1,093,352 B** | **完全相同**（旧文"684,032 B"是 `lsmod` 内存值，作废） |
 | 构建时间 | — | `Mon Oct 5 04:20:00 UTC 2026` | **不可作判据**：GKI 可复现构建常固定 `KBUILD_BUILD_TIMESTAMP` |
 
-**推论（三条，逐条可反驳）**：
+**推论（四条，逐条可反驳）**：
 
-1. 设备上的 GPU `.ko` 是**另一次构建**（`6.6.143` 世代），不是仓库归档的 `6.6.118` 批次。
-2. 两者共享的只有**源码标签** `r49p1-03bet0` 与 **UK ABI 1.30**。
-3. Stage 3 / 03-REA 的**二进制级数字**（kCFI 类型哈希、`__versions` CRC、模块体积）来自 `6.6.118` 批次，**不能直接套用到设备构建**；源码级结论（表项数、成员顺序、符号计数、依赖方向）不受影响。
+1. 设备 GPU `.ko` 属于**另一个 6.6.118 构建**（原厂 OTA `OS4.0.3.0`），不是仓库归档的 `OS3.0.305.0` 批次。
+2. 但**差异面极小**：15 个可比对模块中 14 个文件字节数、`.text` 节、`__versions` 节全部逐字节相等；只有 **kbase** 有实质代码差异。合理解释是"MTK GPU 驱动在两次 OTA 间基本冻结，仅 kbase 更新"。
+3. 两者共享源码标签 `r49p1-03bet0` 与 UK ABI 1.30；`mali_mgm`/`mali_prot_alloc` 更进一层——`srcversion` 相同，源码可视为同一份。
+4. Stage 3 / 03-REA 的二进制级数字**按模块分层**：kbase 的 CRC/kCFI 必须重导；其余 14 个结构性一致，可用一次 `readelf -x __versions` 抽样验证后沿用（`08` §3.7.6）。
 
-> 反向可反驳条件：若设备 `.ko` 的 `modinfo vermagic` 实测为 `6.6.118-…`，则本条推翻（但那意味着 `modversions` 校验被绕过，与 Android init 的加载方式不符）。该实测属 U4-24。
+> **反向可反驳条件**：若设备 kbase 的 `.text` 与 `__versions` 也与仓库相等，则"kbase 实质差异"被推翻——实测否证了这一点（+6,788 B / +1 条）。
+>
+> **上一版的一处逻辑错误（留痕）**：原文写"若设备 vermagic 为 `6.6.118-…` 则本条推翻，但那意味着 `modversions` 校验被绕过，**与 Android init 的加载方式不符**"。这句的后半段是错的：vermagic 校验在**内核** `load_module()` 的 `same_magic()` 里执行，`init` 只是发起 `finit_module()` 调用；**init 的行为不能排除内核被 patch**。实测正是这一情形。
+
+### 3.5 18 个 GPU 相关 `.ko` 的身份台账（[D·A]，2026-11-16 00:04）
+
+**共同属性**（逐文件实测，无例外）：
+
+| 项 | 值 |
+| --- | --- |
+| 目录 | `/vendor_dlkm/lib/modules/`（`/vendor/lib/modules/` 为**同一内容**的挂载副本，`modules.load` 与 `modules.dep` 大小一致） |
+| 权限 | `-rw-r--r-- root root` |
+| vermagic（18 个全部相同） | `6.6.118-android15-8-g54a15cf3acba-4k SMP preempt mod_unload modversions aarch64` |
+| `VERMAGIC_MATCHES_UNAME_R` | **全部 `NO`**（运行内核为 `6.6.143-…-gf9aa2fec23c3-4k`） |
+| ELF 类型 | `ELF64 / REL / arm64`；`ELF_BUILD_ID` 在文件内 `NOT_FOUND`（`readelf -n` 无输出），但**运行时可从 sysfs 读**（见下） |
+
+| 模块 | 字节 | SHA256（前 16） | 装载 |
+| --- | ---: | --- | :---: |
+| `ged` | 1,093,352 | `e4ff2a35e3019a97` | ✅ |
+| `mali_kbase_mt6991_r49` | 2,328,064 | `ad0e0ff25a2918a2` | ✅ |
+| `mali_mgm_mt6991_r49` | 55,696 | `d0545e42f5d8efe2` | ✅ |
+| `mali_prot_alloc_mt6991_r49` | 21,080 | `b46cdbc84260f2b2` | ✅ |
+| `mtk_gpu_hal` | 58,968 | `e06848fab93ac374` | ✅ |
+| `mtk_gpu_pdma_mt6991` | 40,512 | `d97bfd385f21f754` | ✅ |
+| `mtk_gpu_qos` | 33,376 | `28b74344d2f4783d` | ✅ |
+| `mtk_gpu_iommu_mt6991` | 12,840 | `07e56abe0f466bee` | ✅ |
+| `mtk_gpu_power_throttling` | 38,288 | `4e351df079c88949` | ✅ |
+| `mtk_gpueb` | 128,560 | `0331a9f008cce369` | ✅ |
+| `mtk_gpufreq_mt6991` | 118,368 | `2932c02a7e56345e` | ✅ |
+| `mtk_gpufreq_wrapper` | 151,736 | `0625afae4414b98a` | ✅ |
+| `mtk_ghpm` | 45,528 | `cfdd8685945813a4` | ✅ |
+| `mtk_cg_peak_power_throttling` | 107,384 | `dedd3835384f5562` | ✅ |
+| `mtk_smmu_qos` | 206,920 | `1ce29db0f3d4ee03` | ✅ |
+| `met_gpu_api` | 14,336 | `716f6bf0ba9cd025` | ❌ 文件在、未装载 |
+| `met_gpu_adv_api` | 12,184 | `6961d8a2c27a03a0` | ❌ 同上 |
+| `met_gpueb_api` | 14,120 | `9eeb4f8e1dc10f55` | ❌ 同上 |
+
+**运行时版本信息（`/sys/module/<name>/`）**：
+
+| 模块 | `version` | `srcversion` |
+| --- | --- | --- |
+| `mali_kbase_mt6991_r49` | `r49p1-03bet0 (UK version 1.30)` | `CAC308B0D61305ACE6017E3` |
+| `mali_mgm_mt6991_r49` | `1.0` | `568D03DB63997B3B774EB55` |
+| `mali_prot_alloc_mt6991_r49` | `1.0` | `D3B1B48B857E84094BD0014` |
+| 其余 15 个 | `NOT_READABLE`（模块无 `MODULE_VERSION`） | `NOT_READABLE`（未开 `CONFIG_MODULE_SRCVERSION_ALL`） |
+
+**sysfs Build ID（`notes/.note.gnu.build-id`，24 字节头 + 20 字节 SHA1）**：
+
+| 模块 | Build ID（末尾 20 字节） |
+| --- | --- |
+| `ged` | `39873dc55e3c3c11a55812a342c9963c941235de` |
+| `mali_kbase_mt6991_r49` | `c5eac1f08ba2434defdeb72d2f4185c4a2217bb3` |
+| `mtk_gpueb` | `77ccdd56b79d77bd75e90d58b54ff879668964c4` |
+| （其余同理，全表见采集原文） | — |
+
+> **这一列的价值**：文件内 `readelf -n` 取不到 Build ID（内核模块未保留 `.note` 段），但**运行时 sysfs 里有**——`/sys/module/<m>/notes/.note.gnu.build-id` 是内核在装载时保留的 ELF note。这是"同一个 `.ko` 从磁盘到内存"的短指纹，可用于日后核对"装载的是否就是盘上这份"。
+>
+> **局限**：它是**模块自身**的 Build ID，不是内核的；不能用来证明与仓库基线同源（该判定靠 vermagic 与 SHA256）。
+
+**装载拓扑（`/proc/modules` used-by 列，[D·B]）**：
+
+```
+mali_kbase_mt6991_r49   refcount 77   被 5 个模块引用（ged, gpufreq_wrapper, gpueb, gpu_hal, pdma）
+mtk_gpufreq_wrapper     refcount  9   被 9 个引用（含 thermal_interface, mtk_mbraink_v6991）
+mtk_gpueb               refcount 10
+mtk_gpu_hal             refcount  8
+ged                     refcount  5   被 mtk_gpu_qos / pdma / gpufreq_wrapper / gpu_hal / gpueb 引用
+mali_mgm_mt6991_r49     refcount  1
+mali_prot_alloc_…       refcount  1
+mtk_ghpm                refcount  1   被 gpufreq_wrapper 引用
+mtk_gpu_pdma_mt6991     refcount  1   被 kbase 引用
+mtk_gpu_qos             refcount  1   被 ged 引用
+mtk_gpu_iommu_mt6991    refcount  0
+mtk_gpufreq_mt6991      refcount  0
+mtk_gpu_power_throttling refcount 0
+mtk_cg_peak_power_…     refcount  0
+mtk_smmu_qos            refcount  0
+```
+
+> **`mtk_ghpm` 是仓库基线没有的第 13 个 GPU 链路模块**（`modules.load` 内、被 `mtk_gpufreq_wrapper` 引用）。`mtk_cg_peak_power_throttling` 同在 `modules.load`；`mtk_smmu_qos` 不在，由平台侧加载。三者 OS3.0.305.0 均无。
 
 ---
 
@@ -492,7 +599,7 @@ DDK_BUILD_ID:   NOT_FOUND
 
 ---
 
-## 8. 三份采集文件的净收益
+## 8. 四份采集文件的净收益
 
 | 首轮结论 | 本次判定 | 依据 |
 | --- | --- | --- |
@@ -504,8 +611,11 @@ DDK_BUILD_ID:   NOT_FOUND
 | "bootloop UNKNOWN" | ✅ 保持 UNKNOWN | 无 HyperOS 4.0.3.0 实机故障证据 |
 | "EGL 路径 UNKNOWN" | ⚠️ 拆成"可用 [D] / 机制 [U]" | 见 §6 |
 | （隐含）"设备 = 原厂环境" | ⚠️ **不成立**：内核为第三方 GKI（`u:r:ksu:s0`） | §2 / §3 / `08` §1 |
-| "15 个 `.ko` 已装载" | ⚠️ **限定**：装载的是设备侧 `6.6.143` 构建，非仓库 `6.6.118` 基线 | §3.4 |
+| "15 个 `.ko` 已装载" | ⚠️ **限定**：装载的是设备侧 `6.6.118-…-g54a15cf3acba` 构建，非仓库 `6.6.118-…-g57e634f35c1b` 基线 | §3.4 |
 | （新增）"DDK 版本代次未知" | ✅ **已取**：`r49p1-03bet0`，与 kbase 同串 | §5.4 |
+| （新增）"设备模块身份未知"（U4-24a） | ✅ **已取**：18 个文件路径/大小/SHA256/vermagic/srcversion | §3.5 |
+| （新增）"设备内核 = 6.6.143" | ⚠️ **证伪**：6.6.143 是**第三方运行内核**；原厂内核应为 `6.6.118-g54a15cf3acba` | §2 第 4 条、`08` §3.1 |
+| （新增）"装载成功 = ABI 兼容" | ⚠️ **进一步削弱**：该内核绕过 vermagic 校验，装载成功不构成 ABI 证据 | `08` §3.7.4 |
 
 ---
 
@@ -519,10 +629,11 @@ DDK_BUILD_ID:   NOT_FOUND
 6. **SUSFS 可隐藏路径**。内核启用 SUSFS 后，`ls` / `stat` 结果可被策略过滤，使"清单里没有"这一推断比第 1 条更弱。凡本文的"不存在"判断，均只作**弱推断**。
 7. **未采 mount 表**。无法判断 `/vendor` 当前视图是否被 KernelSU / NoMount 元模块 overlay 覆盖（U4-27）。因此 A 类结论的边界是"**分区未被安装包修改**"，不是"**视图必为分区原样**"。
 8. **观测内核非原厂**。所有运行时结论仅代表"厂商模块 + 第三方 GKI 内核"这一组合，不外推到原厂 boot（详见 `08_kernel_provenance_audit.md`）。
+9. **"内核版本"有三个，不能只写一个**（2026-11-16 教训）：运行内核 `6.6.143-gf9aa2fec23c3`（第三方）／厂商模块构建基线 `6.6.118-g54a15cf3acba`（≈原厂 boot）／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）。此前只写"6.6.143"并称其为"设备内核"，是把第三方内核当成了原厂内核。凡本文出现"内核"二字，必须能回答**是哪一个**。
 
 ---
 
-## 10. 最小化只读补充采集（**已于 2026-11-15 23:20 执行**）
+## 10. 最小化只读补充采集（**已执行两批：2026-11-15 23:20 / 2026-11-16 00:04**）
 
 **结论：需要，且只需一次。** 理由是存在两个**能被几十字节直接闭合**的 P0 缺口，而基线采集在原理上无法覆盖。**本次已由用户执行并回传，结果见 §4.5 / §5.4。** 本节保留原始命令与判读表，作为**可复现记录**。
 
@@ -556,23 +667,15 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 - **实际结果**：第一条 **NOT_FOUND**（该字面模式不存在）；第二条 **`r49p1-03bet0`**。→ 由 release 串映射为 1.30。见 §5.4。
   - 这条"部分命中"本身就是重要信息：它说明 **DDK 不自报 UK 版本，只自报 release**。因此后续任何"DDK 宣称 N.N"的表述都必须写成"由 release 映射"，不能写成"库内读到"。
 
-### 10.3 缺口三（P1）：模块构建代次（U4-24）—— **工具已就绪，待执行**
+### 10.3 缺口三（P1）：模块构建代次（U4-24）—— **✅ 已执行（2026-11-16 00:04），a 闭合 / b 开放**
 
 - 为什么需要：§3.4 已证明设备 `.ko` 与仓库基线 `.ko` **不是同一构建**。若 Stage 5 要用二进制级常量（`__versions` CRC、kCFI 哈希），必须以设备构建为准。
-- 为什么不能用上面那种"手写一行 `strings`"的做法：模块路径**不是猜出来的**（`/vendor/lib64/modules` 只是常见位置之一），已有采集也没记录过路径。因此改为一次受控采集：
-
-```sh
-# 手机端（aShell You，已 root），只读，无 adb
-su
-sh /data/local/tmp/c.sh
-```
-
-脚本：`tools/collect_gpu_module_identity.sh`；步骤与判读表：`tools/README_gpu_module_identity.md`。
-
-采集内容（每个模块独立成段）：实际路径 / realpath / 文件大小 / SHA256 / 权限 / `.modinfo` 的 `name, vermagic, srcversion, version, depends, retpoline, intree` / `VERMAGIC_MATCHES_UNAME_R` / sysfs `version, srcversion, taint, initstate, coresize, inuse, holders` / sysfs Build ID / ELF 头与 Build ID / `__versions`、`__ksymtab`、`.text`、`.modinfo` 节大小。
-
-- 读法：vermagic 应为 `6.6.143-android15-8-gf9aa2fec23c3-4k …`；若如此，§3.4 的推论由 `[E2]` 升为 `[D·C]`。完整判定矩阵（含"若是第三种串"这一支）见 `08` §3.6.4。
-- **子项拆分**：U4-24a = 身份（本脚本可闭合）；U4-24b = 数值（设备构建的 `__ksymtab` CRC / kCFI 期望常量，需反汇编或 `.ko` 副本，**本阶段不做**）。见 `08` §3.6.5。
+- 为什么不用"手写一行 `strings`"：模块路径**不是猜出来的**（`/vendor/lib64/modules` 只是常见位置之一，本机实际为 `/vendor_dlkm/lib/modules`），已有采集也没记录过路径。因此改为一次受控采集。
+- 执行方式：手机端 aShell You + root，`sh /data/local/tmp/c.sh`（脚本 `tools/collect_gpu_module_identity.sh`，指南 `tools/README_gpu_module_identity.md`）。
+- 结果：18 个文件的路径/大小/SHA256/vermagic/`srcversion`/sysfs Build ID 全部取得，见 §3.5。
+- **读法（实测结论）**：vermagic 为 **`6.6.118-android15-8-g54a15cf3acba-4k …`**——既非仓库基线的 `g57e634f35c1b`，也非运行内核的 `6.6.143-gf9aa2fec23c3`，属判定矩阵的**第三分支**。由此确认两件事：①设备模块是原厂 OTA（`OS4.0.3.0`）的 6.6.118 构建；②运行内核**绕过了 vermagic 校验**（否则不可能装载）。判定与后果见 `08` §3.6.4、§3.7.4。
+- **子项拆分**：U4-24a = 身份 → **✅ 已闭合**；U4-24b = 数值（`__ksymtab` CRC / kCFI 期望常量）→ **开放**，但范围已收窄到 kbase（`08` §3.7.6）。
+- **下一步最小动作**（若要推进 b）：设备端 `readelf -x __versions /vendor_dlkm/lib/modules/ged.ko`，回传纯十六进制文本（约 96 KB），即可判定其余 14 个模块的 CRC 能否整体沿用。
 
 ### 10.4 明确不要求的采集
 
@@ -582,12 +685,13 @@ sh /data/local/tmp/c.sh
 | `strace` / `dmesg` / `logcat` | 需 root 或重启，超出"最小只读"；待 P0 闭合后再议（U4-14/U4-16/U4-02） |
 | 重跑整份 `collect_device.sh` | 三份文件已覆盖其绝大部分输出 |
 
-> **状态（2026-11-15 23:50 更新）**：
+> **状态（2026-11-16 00:04 更新）**：
 >
 > | ID | 旧状态 | 新状态 |
 > | --- | --- | --- |
 > | **U4-01** | UNKNOWN（有 E2 级推理） | **✅ 已闭合 [D·A]**：header `0.3` |
 > | **U4-04** | UNKNOWN（有 E1 级推理） | **⚠️ 部分闭合**：版本代次 `r49p1-03bet0` [D·A]；padding / props 行为仍 [U] |
-> | **U4-24** | UNKNOWN（无采集手段） | **⚠️ 工具已就绪，仍未闭合**：`tools/collect_gpu_module_identity.sh` + 指南已提交，**未在真机运行**；子项 b（CRC / kCFI 数值）本阶段不做 |
+> | **U4-24a** | UNKNOWN（无采集手段） | **✅ 已闭合 [D·A]**：18 个文件的路径/大小/SHA256/vermagic/srcversion（§3.5） |
+> | **U4-24b** | — | **⚠️ 开放**：设备构建的 `__ksymtab` CRC / kCFI 常量；范围收窄至 kbase（`08` §3.7.6） |
 >
-> §10.3 的采集工具已交付，但**在用户回传输出之前，U4-24 一律记 UNKNOWN**。
+> §10.3 的采集已在真机执行一次。**整体 U4-24 记"部分闭合"，不得写成"已闭合"**——b 子项仍未取得任何数值。

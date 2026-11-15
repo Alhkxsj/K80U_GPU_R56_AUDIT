@@ -2,7 +2,7 @@
 
 > **Redmi K80 至尊版（25060RK16C）· Arm Mali 5th Gen GPU 驱动 R56p0 移植可行性审计**
 
-本仓库是一个**只读式技术审计工程**，用于评估将 Arm Mali 第五代（5th Gen / CSF 架构）GPU 驱动 **R56p0** 移植到本机 **Android 17 / Linux 6.6.143 / MT6991** 平台的可行性。仓库本身不是驱动工程，不承载可直接编译的生产代码。
+本仓库是一个**只读式技术审计工程**，用于评估将 Arm Mali 第五代（5th Gen / CSF 架构）GPU 驱动 **R56p0** 移植到本机 **Android 17 / 原厂 Linux 6.6.118 / MT6991** 平台的可行性。（运行时内核是第三方的 `6.6.143`，详见下表）仓库本身不是驱动工程，不承载可直接编译的生产代码。
 
 ---
 
@@ -37,8 +37,8 @@
 | SoC 平台 | MediaTek **MT6991** | `ro.board.platform` **[D]** |
 | GPU | Arm **Immortalis-G925 MC12**（5th Gen，CSF 固件驱动架构） | `compatible = arm,mali-valhall` **[D]** |
 | 操作系统 | **Android 17（SDK 37）** · HyperOS `OS4.0.3.0.XONCNXM` | `ro.build.version.release/sdk`、`ro.build.fingerprint` **[D]** |
-| 内核 | **Linux 6.6.143-android15-8-gf9aa2fec23c3-4k**（GKI 形态；`android15` 是分支名，非 Android 版本） | `uname -a` **[D]** |
-| **运行时内核** | **第三方 GKI 构建**（KernelSU + SUSFS 补丁；内核源码提交 `f9aa2fec23c3…`，基于 Google GKI `android15-6.6`） | `u:r:ksu:s0` **[D]** + 构建运行页 **[B]** |
+| **原厂内核（推定）** | **Linux 6.6.118-android15-8-g54a15cf3acba-4k**（由 18 个厂商 `.ko` 的 vermagic 反推；`android15` 是分支名，非 Android 版本） | `[E2]`，见 [`07`](05_userspace_firmware/07_device_evidence.md) §3.5 |
+| **运行时内核**（第三方） | **Linux 6.6.143-android15-8-gf9aa2fec23c3-4k**（KernelSU + SUSFS 补丁；源码提交 `f9aa2fec23c3…`，基于 Google GKI `android15-6.6`） | `uname -a` **[D]** + `u:r:ksu:s0` **[D]** + 构建运行页 **[B]** |
 | 目标驱动 | Arm Mali GPU DDK **R56p0**（kbase 内核驱动 + CSF firmware + 用户态 blobs） | `02_r56_source/` |
 
 > **本表三处已按真机更正（2026-11-15）**：原写 "Android 16"、"Linux 6.6（GKI 形态）"、"机型代码 25060RK16C"（正确但缺代号）。Android 版本差异不是文字问题——它直接影响 `README` §7 第 5 项（KMI/vermagic）与 HyperOS 版本前提。
@@ -81,7 +81,8 @@
 > - **实测判据**：原厂固件 header = **`0.3`**（`offset 4 = 0x03`）**[D·A]** → **组合 B（只换内核）被实测否决**，不再是"逻辑成立、证据待确认"
 > - **原厂三方配套**：固件 0.3 + kbase `r49p1-03bet0` + DDK `r49p1-03bet0`，代次是**整体**属性 **[D·A]+[D·C]**
 > - **原厂用户态在契约层可保留**（UAPI 全兼容 + `min()` 夹取），但必须**整套**保留，实现层行为未验证
-> - **来源判据**：设备 `.ko` 与仓库基线 `.ko` 不是同一构建（vermagic `6.6.118-…` vs 运行内核 `6.6.143-…`）→ Stage 3 的二进制级常量需以设备构建重导 **[E1]+[E2]**
+> - **来源判据**：设备 `.ko` 与仓库基线 `.ko` 不是同一构建——两者同为 `6.6.118` 分支，但提交不同（`g54a15cf3acba` vs `g57e634f35c1b`，分属 OS4.0.3.0 与 OS3.0.305.0）；**14/15 个模块的字节数与关键节大小完全相同，只有 kbase 实质不同** → 二进制级常量**按模块分层**：kbase 必须重导，其余可抽样验证后沿用 **[D·A]+[E1]**
+> - **环境风险**：运行内核**绕过 vermagic 校验**（15 个模块版本串不符仍全部装载）→ 在本机上"能装载 / 能跑"**不能**作为 ABI 兼容证据
 >
 > **仍未闭环的原因**：缺运行时证据（dmesg / strace / 故障注入），剩余 P0 为 U4-04（padding / props 行为）、U4-10、U4-12。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7、[`05_userspace_firmware/07_device_evidence.md`](05_userspace_firmware/07_device_evidence.md) §10 与 [`05_userspace_firmware/08_kernel_provenance_audit.md`](05_userspace_firmware/08_kernel_provenance_audit.md) §6。
 
@@ -187,12 +188,13 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2 | MTK 私有改动是否可枚举、可分离 | ⚠️ 可枚举，**不可分离** | 约 1,200 处注入 / 39 个 `CONFIG_MALI_MTK_*` / 约 70 个专属文件；其中近 900 处在 Arm 核心文件内部（`03_kbase_csf/06` Q5） |
 | 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ✅ **实测判定** | 两版加载器逐行对照：`FIRMWARE_HEADER_VERSION_MINOR` **3 → 4**，`!=` 严格相等、无兼容分支（`05/02` §3.1）。**原厂固件 header 实测 `0.3`**（`6e 3a f1 c3 03 00 00 00`，[D·A]，`05/02` §3.0.5）→ r56p0 必拒 |
 | 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ⚠️ **契约层已闭环，实现层未验证** | ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、`min()` 夹取保证有效版本 ≤1.30（`05/03`）。真机已确认 `libGLES_mali.so` 存在（53 MB / API 35）及其对 `libged`/`libgpud` 的硬依赖；**DDK 自称版本与行为仍为 UNKNOWN**（U4-04） |
-| 5 | Android 17 / GKI 6.6.143 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ⚠️ **分层：装载可行已证，替换未证** | ①**装载**：厂商 12 个 GPU 模块已在**重编的** `6.6.143` GKI 内核上成功装载（`lsmod` + `/dev/mali0` + 服务 pid）→ GKI KMI（`android15-8`）未被破坏 **[D·B]**+**[D·C]**；②**代次**：仓库基线 15 个 `.ko` 的 vermagic 为 `6.6.118-…-g57e634f35c1b`，**与运行内核不相等**，不能直接用于该设备 **[E1]**+**[E2]**；③**替换**：r56p0 kbase 需匹配 MTK 模块导出的 89 个符号及其 CRC，未验证 **[U]**（U4-24/U4-25） |
+| 5 | Android 17 / GKI 6.6.x 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ⚠️ **分层：装载可行已证（但含补丁因素），替换未证** | ①**装载**：厂商 15 个 GPU 相关模块（含 `ged`）已在**重编的** `6.6.143` GKI 内核上装载（`lsmod` + `/dev/mali0` + 服务 pid）**[D·B]**+**[D·C]**；②**但装载成功含补丁因素**：这些模块的 vermagic 为 `6.6.118-…-g54a15cf3acba`，与运行内核 `6.6.143-…-gf9aa2fec23c3` 不符却被接受 → 内核**绕过 `same_magic()`**，故不能据此推出 ABI 兼容 **[D·A]**+**[E2]**；③**代次**：仓库基线 15 个 `.ko` 为 `6.6.118-…-g57e634f35c1b`（OS3.0.305.0），14/15 个与设备结构完全一致、kbase 实质不同 **[D·A]**+**[E1]**；④**替换**：r56p0 kbase 需匹配 MTK 模块导出的 89 个符号及其 CRC，未验证 **[U]**（U4-24b/U4-25） |
 | 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ✅ 已闭环（MTK 侧） | 寄存器映射与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS/电源域由 MTK 平台层负责且**对 kbase 零反向依赖**（`04/01` §4），保留即可 |
 
-> **更新后的闭环状态（2026-11-15 补充核验后）**：
-> - 第 3 项：**源码判据**已判定"r56p0 只接受 0.4"，但**原厂固件实际值仍未实测**。因此该行状态是"**判据成立、证据待补**"，而不是"已闭环"。这是本轮从"✅"降为"⚠️"的唯一一处——因为首轮把"源码要求"当成了"固件实测"。
-> - 第 4 项：契约层充分闭环，且真机补齐了实体构成；剩余风险是"DDK 是否遵守契约"，属可实测范畴（2 条 `grep` 即可推进）。
+> **更新后的闭环状态（2026-11-16 模块身份审计后）**：
+> - 第 3 项：**已闭环**。固件 header 实测 `6e 3a f1 c3 03 00 00 00` → `0.3`，r56p0 期望 `0.4`，`!=` 严格无 fallback → **组合 B 实测否决** **[D·A]**+**[E1]**。
+> - 第 4 项：契约层充分闭环；真机补齐了实体构成；DDK release 串 `r49p1-03bet0` 已取，padding / props 行为仍为 [U]。
+> - 第 5 项：**是本轮变化最大的一行**。原写"GKI KMI 未被破坏"，现必须加上"装载成功含补丁因素"——因为该内核绕过了 vermagic 校验，这条证据不再能支撑 ABI 兼容。详见 [`08`](05_userspace_firmware/08_kernel_provenance_audit.md) §3.7.4。
 > - 第 5 项：**拆成"装载 / 代次 / 替换"三层**。装载层已由第三方内核的实机运行给出正面证据（KMI 未破坏）；代次层已判定仓库 `.ko` 与设备内核不同代，不能直接复用；替换层（r56p0 kbase 能否匹配 MTK 导出的 89 个符号）仍未验证。**这三层不可互相替代**。
 
 ---
@@ -215,3 +217,4 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-15 | **Stage 4 P0 补采整合** | **U4-01 闭合 / U4-04 推进**（`stage4: close U4-01 with firmware header bytes, advance U4-04`）：用户以 aShell You 在手机端执行脚本并回传纯文本。①**固件 header 实测 `0.3`**：`6e 3a f1 c3 03 00 00 00`，magic OK、`offset 4 = 0x03`、`offset 5 = 0x00` → U4-01 由 [U] 升为 **[D·A]**，组合 B 由"推理否决"升为"**实测否决**"；②**DDK 内含 `r49p1-03bet0`**，与 kbase `MODULE_VERSION` **同串** → 原厂"固件+kbase+DDK"三方配套（新决策 D-017）；③`UK version N.N` 字面量 `NOT_FOUND`，1.30 由 release 映射而非库内自报；④记录两条**禁止表述**：`version_hash = 0x030A0000` ≠ GLB 3.10.0、"DDK 实测宣称 1.30"；⑤计数 **27/4/3/4 → 27/5/3/3**；新增 D-016，D-008 转为生效。**未上传任何二进制** |
 | 2026-11-15 | **U4-24 采集工具 + 口径更正** | **设备 GPU 模块身份核验准备**（`stage4: add GPU module identity audit`）：①新增只读采集脚本 `05/tools/collect_gpu_module_identity.sh`（手机端，无 adb）与执行指南 `README_gpu_module_identity.md`——现有三份采集只有 `lsmod`，**没有**路径 / 文件大小 / SHA256 / vermagic，故 U4-24 无法离线闭合；②`05/08` 新增 **§3.6**：判定矩阵、模块集合映射、**kCFI（类型型 oracle）vs `__versions` CRC（数值型 oracle）的重导策略**、U4-24 拆 a/b；③**更正三处口径**：`lsmod` 的 size 是 `core_layout.size`（内存、页对齐）而非文件大小（上一行"`ged` 1,093,352 B vs 684,032 B"不可相减）；设备多出 **`mtk_ghpm`** 而仓库无此文件（集合不对称）；`met_*`「未装载」受筛选口径限制；④**计数不变 27/5/3/3，U4-24 仍未闭合**；新增 D-018 / D-019 |
 | 2026-11-15 | **治理（本项目基础设施）** | **建立长期上下文管理**（`docs: establish persistent agent context protocol`）：新增根 [`AGENTS.md`](AGENTS.md)（全局执行协议：上下文恢复 / Git 检查 / 历史核对 / 证据等级 / 九类禁止表述 / 红线 / 自检清单）、[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)（阶段状态、Stage 4 的 27/4/3/4 计数与 P0 明细、设备事实、技术债、任务队列、Stage 5 准入）、[`docs/DECISION_LOG.md`](docs/DECISION_LOG.md)（D-001…D-015）；本文件新增 §0 恢复入口与 `docs/` 目录职责。**目的：让项目状态不再依赖某一次 Agent 对话的记忆。** 同轮修正 5 处 `Android 16` 过时表述（`00_reference/README.md`、`final_report/README.md`、`06_porting_design/README.md` 直接更正为 17；`SOURCE_ACQUISITION.md`、`03_kbase_csf/06_blocking_issues.md` 保留原文并加更正注），另 `03_kbase_csf/01_uapi_abi_diff.md` 一处补"其发布时的"限定；`00_reference/third_party/` 外部文档原文不改（D-014） |
+| 2026-11-16 | **U4-24 实测整合（a 闭合 / b 开放）** | `stage4: close U4-24a with device module identity`：用户执行模块身份脚本并回传纯文本。①**18 个 `.ko` 身份全取**：路径 / 大小 / SHA256 / vermagic / `srcversion` / sysfs Build ID；vermagic 全部 `6.6.118-android15-8-**g54a15cf3acba**-4k`；②**推翻一条项目级事实**——`6.6.143` 是**第三方运行内核**，原厂内核应为 `6.6.118-g54a15cf3acba`（三层版本，新决策 D-020）；③**14/15 个模块与仓库基线（OS3.0.305.0 / `g57e634f35c1b`）字节数及 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**（D-022）；④**发现运行内核绕过 vermagic 校验**（15 个串不符仍装载）→ "装载成功"不构成 ABI 证据（D-021）；⑤**"`ged` 差 409 KB"连方向都错**：两侧文件同为 1,093,352 B；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm` / `mtk_cg_peak_power_throttling` / `mtk_smmu_qos`）；⑦修脚本 v1.1 的 `ged$` 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**。**注**：上文 2026-11-15 两条中的"vermagic 118 vs 143"与"684,032 B"表述已被本轮推翻，保留原文以留痕（D-012）|
