@@ -25,7 +25,7 @@
 | `gpu_props` 属性 ID | 83 个**值全部不变**，新增 3 个**追加在末尾** | §8 |
 | 版本协商 | `min()` **夹取**（非校验），有效版本恒 ≤ 1.30 | §1.5、§2 |
 | 能力门槛 | 1.31/1.32/1.35 的新能力在 ≤1.30 下**全部不生效** | §3 |
-| padding 校验 | r56p0 新增，但**Arm 主动替旧用户态清零** | §9 |
+| padding 校验 | r56p0 新增 48 个钩子：28 空 / 5 替用户态清零 / **15 强制**（含 CS 队列与 CSG 注册）→ **是真实门槛**，非"Arm 全替你清零" | §9 |
 | MTK UAPI 扩展 | 存在 3 组，**均为尾部追加**，不破坏标准值 | §10 |
 
 > **总体判断**：这是一次**减法 + 尾部追加**式演进，不是重排。原厂 1.30 用户态在 r56p0 上会走"旧版本路径"，而这些路径的代码与接口在 r56p0 中被完整保留。
@@ -626,17 +626,15 @@ static inline int check_padding_KBASE_IOCTL_MEM_ALLOC(...)     { return 0; }
 ...
 ```
 
-**只有两个真正检查**：
+> **⚠️ 2026-11-16 更正（留痕）**：本节原文写"**只有两个真正检查**"（`GET_DDK_VERSION` + `MEM_JIT_INIT`），并据此在 §9.3 断言"padding 校验不构成兼容门槛"。**该统计错了**：`mali_kbase_ioctl_helpers.h` 共 **48** 个 `check_padding_*` 定义，原文只看了前 20 个（行 99–215）。全量分类如下，`CS_QUEUE_REGISTER`、`CS_QUEUE_GROUP_CREATE*` 等 **CS 热路径都在强制校验集里**。推导见 `09_stage4_closure.md` §5。
 
-```c
-static inline int check_padding_KBASE_IOCTL_GET_DDK_VERSION(struct kbase_ioctl_get_ddk_version *p)
-{ return p->padding; }
+| 类别 | 数量 | 行为 |
+| --- | ---: | --- |
+| 空实现 | **28** | 不校验、不清零 |
+| 替用户态清零 | **5** | `MEM_SYNC` / `CS_QUEUE_BIND` / `KCPU_QUEUE_DELETE` / `KCPU_QUEUE_ENQUEUE` / `QUEUE_GROUP_CLEAR_FAULTS` |
+| **强制校验（非零 → `-EINVAL`）** | **12** | 见 §9.4 |
 
-static inline int check_padding_KBASE_IOCTL_MEM_JIT_INIT(struct kbase_ioctl_mem_jit_init *p)
-{ for (i = 0; i < ARRAY_SIZE(p->padding); i++) if (p->padding[i]) return -1; return 0; }
-```
-
-### 9.3 最关键的是：Arm 主动替旧用户态清零
+### 9.3 部分 ioctl 由 Arm 主动替旧用户态清零
 
 ```c
 /* r56p0 mali_kbase_ioctl_helpers.h:152-167 */
@@ -659,21 +657,35 @@ static inline int check_padding_KBASE_IOCTL_MEM_SYNC(struct kbase_ioctl_mem_sync
 }
 ```
 
-> **这段注释是本次审计中最重要的文本证据之一**。它明确表明：
-> 1. Arm **知道**旧版用户态可能不清零 padding
-> 2. Arm 选择**替它清零**而不是拒绝
-> 3. 严格检查被**推迟到兼容窗口结束后**（`GPUCORE-42000`）
+> **这段注释仍是重要的文本证据**，但它证明的范围**比原以为的小**：它只覆盖 5 个 ioctl（`MEM_SYNC` / `CS_QUEUE_BIND` / `KCPU_QUEUE_DELETE` / `KCPU_QUEUE_ENQUEUE` / `QUEUE_GROUP_CLEAR_FAULTS`）。
+> 1. Arm **知道**旧版用户态可能不清零 padding → 成立
+> 2. Arm 在**这 5 个** ioctl 上选择替它清零 → 成立
+> 3. 严格检查被推迟到兼容窗口结束后（`GPUCORE-42000`）→ 成立，**但仅对这 5 个**成立
 >
-> 这直接排除了"padding 校验构成兼容门槛"的假设。
+> ~~这直接排除了"padding 校验构成兼容门槛"的假设。~~ → **撤回**：另外 12 个 ioctl 已经是强制校验，其中包含 CS 队列与 CSG 注册。
 
-### 9.4 对有真实检查的两个 ioctl 的评估
+### 9.4 强制校验的 15 个函数（2026-11-16 全量重算；`28 + 5 + 15 = 48`）
 
-| ioctl | 检查内容 | 风险 |
-| --- | --- | --- |
-| `GET_DDK_VERSION` | `p->padding` 必须为 0 | 用户态若不清零 → `-EINVAL`。但该 ioctl 仅用于查询版本，失败可降级 |
-| `MEM_JIT_INIT` | `p->padding[]` 必须全 0 | JIT 内存初始化失败 → tiler heap 不可用 → **可能影响渲染** |
+| # | ioctl | 检查 | 触不到的后果 |
+| ---: | --- | --- | --- |
+| 1 | `GET_DDK_VERSION` | `p->padding` 必须 0 | 版本查询失败，可降级 |
+| 2 | `MEM_JIT_INIT` | `padding[]` 全 0 | JIT 初始化失败 → tiler heap 不可用 |
+| 3 | `MEM_PROFILE_ADD` | `p->padding` 必须 0 | 性能分析注册失败，可忽略 |
+| 4 | `GET_CPU_GPU_TIMEINFO` | `in.paddings[]` 全 0 | 时间戳查询失败 |
+| 5 | **`CS_QUEUE_REGISTER`** | `padding[]` 全 0 | **CS 队列注册失败 → 无法提交 GPU 工作** |
+| 6 | **`CS_QUEUE_REGISTER_EX`** | `padding[]` + `ex_padding[]` | 同上（扩展注册路径） |
+| 7–10 | **`CS_QUEUE_GROUP_CREATE`**（联合体分派）**/ `_1_6` / `_1_18` / `_1_35`** | `in.padding[]` 全 0 | **CSG 创建失败 → 上下文无法建立** |
+| 11 | **`CS_QUEUE_GROUP_TERMINATE`** | `padding[]` 全 0 | CSG 无法正常销毁（泄漏/卡死） |
+| 12–13 | **`CS_TILER_HEAP_INIT` / `_1_13`** | `in.padding` 必须 0 | tiler heap 不可用 |
+| 14–15 | `MEM_ALLOC_EX` / `READ_USER_PAGE` | `in.extra` / `in.padding` 必须 0 | 分配/回读失败 |
 
-**风险等级**：`MEM_JIT_INIT` 是唯一需要关注的。但原厂 DDK 是否清零 padding 属于 **[U] U4-04**。
+> 逐函数清单与行号见 `09` §5.2（由脚本对 48 个定义全量分类生成）。
+
+**风险等级（2026-11-16 上调）**：
+
+> 原文写"`MEM_JIT_INIT` 是唯一需要关注的"。实际上 **5–11 号全在 CSF 主链路上**：注册 CS 队列、创建 CSG 是任何一次 GPU 提交的前置步骤。若 1.30 DDK 不清零 padding，**GPU 不是"降级"而是"完全不可用"**。
+>
+> 是否清零仍属 **[U] U4-04**——必须从 `libGLES_mali.so` 取得证据（一条 `strace -e ioctl` 或一次反编译）。这是组合 C（r56p0 kbase + 原厂 DDK）的**单点致命风险**。
 
 ---
 

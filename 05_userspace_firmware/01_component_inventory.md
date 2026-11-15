@@ -84,7 +84,7 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 > | 但差异面极小：14/15 个文件字节数与 `.text`/`__versions` 节大小完全相同，仅 kbase 实质不同（+17,640 B） | **[D·A]** |
 > | `ged` 运行时内存 684,032 B **不是文件大小**；设备 `ged.ko` 文件为 1,093,352 B，与仓库**相同** | **[D·A]**（旧佐证作废） |
 > | 两者共享**源码标签** `r49p1-03bet0` 与 **UK ABI 1.30** | **[D·C]** |
-> | 装载成功**不能**作为 ABI 兼容证据（内核绕过 `same_magic`） | **[D·A]**+**[E2]** |
+> | 装载成功只证明"被 import 的符号 CRC 一致"（且前提 `check_version` 未被打补丁），**不能**推出与 R56 兼容。~~内核绕过 `same_magic`~~ 已撤回 | **[D·C]**+**[E1]** |
 >
 > 影响：本章与 `03_gles_egl_abi.md` 中依赖**源码**的结论不受影响；依赖**二进制常量**的结论（kCFI 类型哈希、`__versions` CRC）须以设备构建重导。详见 [`08_kernel_provenance_audit.md`](08_kernel_provenance_audit.md) §3。
 

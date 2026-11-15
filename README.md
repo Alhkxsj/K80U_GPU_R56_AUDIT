@@ -13,7 +13,7 @@
 | 顺序 | 文件 | 作用 | 何时必读 |
 | ---: | --- | --- | --- |
 | 1 | [`AGENTS.md`](AGENTS.md) | **强制执行规范**：上下文恢复、Git 检查、证据等级、九类禁止表述、仓库红线、交付格式 | **每次任务开始** |
-| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项 UNKNOWN（闭合 5）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
+| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项 UNKNOWN（闭合 5 / 部分闭合 5）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
 | 3 | [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) | **已形成的决策**：D-001 … D-015，含状态与再审议条件 | 涉及判断"能不能做/能不能改"时 |
 | 4 | 本文件 §1–§7 | 审计标的、阶段路线图、关键问题闭环情况 | 需要全景时 |
 | 5 | 目标目录的 `README.md` + `MANIFEST.md` | 该目录职责、文件清单、证据登记、修订记录 | 进入某目录前 |
@@ -58,7 +58,7 @@
 | Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
 | Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0） |
 | Stage 3-REA | 二进制逆向补充审计（REA + Ghidra） | ✅ 完成 | `04_mtk_platform/REA_SUPPLEMENT.md` 等 8 份；12 个 `.ko` / 5,440 函数 |
-| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，证据部分闭环** | `05_userspace_firmware/` 8 份（`01`–`08`）；**27 项 UNKNOWN，闭合 5 项** |
+| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，收尾核验完成，证据未闭环** | `05_userspace_firmware/` 9 份（`01`–`09`）；**27 项 UNKNOWN，闭合 5 / 部分闭合 5** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
 
 > **Stage 4 的两种状态必须分开读**
@@ -82,9 +82,9 @@
 > - **原厂三方配套**：固件 0.3 + kbase `r49p1-03bet0` + DDK `r49p1-03bet0`，代次是**整体**属性 **[D·A]+[D·C]**
 > - **原厂用户态在契约层可保留**（UAPI 全兼容 + `min()` 夹取），但必须**整套**保留，实现层行为未验证
 > - **来源判据**：设备 `.ko` 与仓库基线 `.ko` 不是同一构建——两者同为 `6.6.118` 分支，但提交不同（`g54a15cf3acba` vs `g57e634f35c1b`，分属 OS4.0.3.0 与 OS3.0.305.0）；**14/15 个模块的字节数与关键节大小完全相同，只有 kbase 实质不同** → 二进制级常量**按模块分层**：kbase 必须重导，其余可抽样验证后沿用 **[D·A]+[E1]**
-> - **环境风险**：运行内核**绕过 vermagic 校验**（15 个模块版本串不符仍全部装载）→ 在本机上"能装载 / 能跑"**不能**作为 ABI 兼容证据
+> - **环境判据（2026-11-16 更正）**：`CONFIG_MODVERSIONS` 下内核**原生忽略** vermagic 的 release 串（`same_magic()`，v6.6 `version.c:88-96`），所以"串不符仍装载"**不是**异常、**不需要**补丁；它只证明被 import 的符号 CRC 一致，**不能**推出与 R56 兼容。真正会掩盖 CRC 错误的是构建开关 `allow_version_mismatch`（默认关闭）。见 [`09`](05_userspace_firmware/09_stage4_closure.md) §2–§3
 >
-> **仍未闭环的原因**：缺运行时证据（dmesg / strace / 故障注入），剩余 P0 为 U4-04（padding / props 行为）、U4-10、U4-12。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7、[`05_userspace_firmware/07_device_evidence.md`](05_userspace_firmware/07_device_evidence.md) §10 与 [`05_userspace_firmware/08_kernel_provenance_audit.md`](05_userspace_firmware/08_kernel_provenance_audit.md) §6。
+> **仍未闭环的原因**：缺运行时证据（dmesg / strace / 故障注入）与两份商业资产（R56 固件、R56 DDK）。剩余 P0 为 U4-04（padding / props 行为）、U4-10、U4-12；**U4-04 的风险已上调为组合 C 的单点致命项**（padding 强制校验 15 处，覆盖 CS 主链路），**U4-12 属阻断**（交付包内 0 个固件）。收尾核验见 [`09`](05_userspace_firmware/09_stage4_closure.md)。详见 [`05_userspace_firmware/06_abi_compatibility_matrix.md`](05_userspace_firmware/06_abi_compatibility_matrix.md) §7、[`05_userspace_firmware/07_device_evidence.md`](05_userspace_firmware/07_device_evidence.md) §10 与 [`05_userspace_firmware/08_kernel_provenance_audit.md`](05_userspace_firmware/08_kernel_provenance_audit.md) §6。
 
 **两条基线均已实体在手**——此前"R56p0 未获取、Stage 2 阻塞"的判断已失效：
 
@@ -165,7 +165,7 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
 | Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
 | Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ Stage 3-REA 二进制补充审计） |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 证据部分闭环**（27 项 UNKNOWN，闭合 5 项；P0 3 项） |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 收尾核验完成**（27 项 UNKNOWN，闭合 5、部分闭合 5；P0 3 项，其中 U4-12 为阻断） |
 | Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始（前置条件：U4-04 行为面 / U4-12 / U4-24；**可设计、不可定论**） |
 
 ---
@@ -188,13 +188,13 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2 | MTK 私有改动是否可枚举、可分离 | ⚠️ 可枚举，**不可分离** | 约 1,200 处注入 / 39 个 `CONFIG_MALI_MTK_*` / 约 70 个专属文件；其中近 900 处在 Arm 核心文件内部（`03_kbase_csf/06` Q5） |
 | 3 | CSF firmware 的 `fw version` 与 kbase `kernel ABI` 匹配窗口 | ✅ **实测判定** | 两版加载器逐行对照：`FIRMWARE_HEADER_VERSION_MINOR` **3 → 4**，`!=` 严格相等、无兼容分支（`05/02` §3.1）。**原厂固件 header 实测 `0.3`**（`6e 3a f1 c3 03 00 00 00`，[D·A]，`05/02` §3.0.5）→ r56p0 必拒 |
 | 4 | 用户态 blobs 是否与 R56p0 kbase 的 ioctl / uk ABI 对齐 | ⚠️ **契约层已闭环，实现层未验证** | ioctl 28/28 逐字相同、结构体 30/30 兼容、属性 ID 83/83 不变、`min()` 夹取保证有效版本 ≤1.30（`05/03`）。真机已确认 `libGLES_mali.so` 存在（53 MB / API 35）及其对 `libged`/`libgpud` 的硬依赖；**DDK 自称版本与行为仍为 UNKNOWN**（U4-04） |
-| 5 | Android 17 / GKI 6.6.x 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ⚠️ **分层：装载可行已证（但含补丁因素），替换未证** | ①**装载**：厂商 15 个 GPU 相关模块（含 `ged`）已在**重编的** `6.6.143` GKI 内核上装载（`lsmod` + `/dev/mali0` + 服务 pid）**[D·B]**+**[D·C]**；②**但装载成功含补丁因素**：这些模块的 vermagic 为 `6.6.118-…-g54a15cf3acba`，与运行内核 `6.6.143-…-gf9aa2fec23c3` 不符却被接受 → 内核**绕过 `same_magic()`**，故不能据此推出 ABI 兼容 **[D·A]**+**[E2]**；③**代次**：仓库基线 15 个 `.ko` 为 `6.6.118-…-g57e634f35c1b`（OS3.0.305.0），14/15 个与设备结构完全一致、kbase 实质不同 **[D·A]**+**[E1]**；④**替换**：r56p0 kbase 需匹配 MTK 模块导出的 89 个符号及其 CRC，未验证 **[U]**（U4-24b/U4-25） |
+| 5 | Android 17 / GKI 6.6.x 的 `vermagic` / `MODULE_SIG` / KMI 是否允许替换 GPU 模块 | ⚠️ **分层：装载可行已证，替换未证** | ①**装载**：厂商 15 个 GPU 相关模块（含 `ged`）已在**重编的** `6.6.143` GKI 内核上装载（`lsmod` + `/dev/mali0` + 服务 pid）**[D·B]**+**[D·C]**；②**为何能装载（2026-11-16 更正）**：不是靠补丁——`CONFIG_MODVERSIONS` 下 `same_magic()` 只比较第一个空格之后的 flags 段（`SMP preempt mod_unload modversions aarch64`），两侧**逐字符相同**，故合法装载 **[E1]**；③**代次**：仓库基线 15 个 `.ko` 为 `6.6.118-…-g57e634f35c1b`（OS3.0.305.0），14/15 个与设备结构完全一致、kbase 实质不同 **[D·A]**+**[E1]**；④**替换**：r56p0 kbase 需匹配 MTK 模块导出的 89 个符号及其 CRC，未验证 **[U]**（U4-24b/U4-25b） |
 | 6 | G925 MC12 的配置项（core mask、DVFS 频点、电源域）在 R56p0 中的支持形态 | ✅ 已闭环（MTK 侧） | 寄存器映射与产品识别逻辑两版一致（`03_kbase_csf/05`）；DVFS/电源域由 MTK 平台层负责且**对 kbase 零反向依赖**（`04/01` §4），保留即可 |
 
 > **更新后的闭环状态（2026-11-16 模块身份审计后）**：
 > - 第 3 项：**已闭环**。固件 header 实测 `6e 3a f1 c3 03 00 00 00` → `0.3`，r56p0 期望 `0.4`，`!=` 严格无 fallback → **组合 B 实测否决** **[D·A]**+**[E1]**。
 > - 第 4 项：契约层充分闭环；真机补齐了实体构成；DDK release 串 `r49p1-03bet0` 已取，padding / props 行为仍为 [U]。
-> - 第 5 项：**是本轮变化最大的一行**。原写"GKI KMI 未被破坏"，现必须加上"装载成功含补丁因素"——因为该内核绕过了 vermagic 校验，这条证据不再能支撑 ABI 兼容。详见 [`08`](05_userspace_firmware/08_kernel_provenance_audit.md) §3.7.4。
+> - 第 5 项：**本轮（收尾核验）再次改写**。上一版写"装载成功含补丁因素——因为该内核绕过了 vermagic 校验"，该判断**已撤回**：那是 6.6 的原生语义，不是补丁。改为"合法装载，证明符号 CRC 一致，但不证明与 R56 兼容"。详见 [`08`](05_userspace_firmware/08_kernel_provenance_audit.md) §3.7.4 与 [`09`](05_userspace_firmware/09_stage4_closure.md) §2。
 > - 第 5 项：**拆成"装载 / 代次 / 替换"三层**。装载层已由第三方内核的实机运行给出正面证据（KMI 未破坏）；代次层已判定仓库 `.ko` 与设备内核不同代，不能直接复用；替换层（r56p0 kbase 能否匹配 MTK 导出的 89 个符号）仍未验证。**这三层不可互相替代**。
 
 ---
@@ -218,3 +218,4 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-15 | **U4-24 采集工具 + 口径更正** | **设备 GPU 模块身份核验准备**（`stage4: add GPU module identity audit`）：①新增只读采集脚本 `05/tools/collect_gpu_module_identity.sh`（手机端，无 adb）与执行指南 `README_gpu_module_identity.md`——现有三份采集只有 `lsmod`，**没有**路径 / 文件大小 / SHA256 / vermagic，故 U4-24 无法离线闭合；②`05/08` 新增 **§3.6**：判定矩阵、模块集合映射、**kCFI（类型型 oracle）vs `__versions` CRC（数值型 oracle）的重导策略**、U4-24 拆 a/b；③**更正三处口径**：`lsmod` 的 size 是 `core_layout.size`（内存、页对齐）而非文件大小（上一行"`ged` 1,093,352 B vs 684,032 B"不可相减）；设备多出 **`mtk_ghpm`** 而仓库无此文件（集合不对称）；`met_*`「未装载」受筛选口径限制；④**计数不变 27/5/3/3，U4-24 仍未闭合**；新增 D-018 / D-019 |
 | 2026-11-15 | **治理（本项目基础设施）** | **建立长期上下文管理**（`docs: establish persistent agent context protocol`）：新增根 [`AGENTS.md`](AGENTS.md)（全局执行协议：上下文恢复 / Git 检查 / 历史核对 / 证据等级 / 九类禁止表述 / 红线 / 自检清单）、[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)（阶段状态、Stage 4 的 27/4/3/4 计数与 P0 明细、设备事实、技术债、任务队列、Stage 5 准入）、[`docs/DECISION_LOG.md`](docs/DECISION_LOG.md)（D-001…D-015）；本文件新增 §0 恢复入口与 `docs/` 目录职责。**目的：让项目状态不再依赖某一次 Agent 对话的记忆。** 同轮修正 5 处 `Android 16` 过时表述（`00_reference/README.md`、`final_report/README.md`、`06_porting_design/README.md` 直接更正为 17；`SOURCE_ACQUISITION.md`、`03_kbase_csf/06_blocking_issues.md` 保留原文并加更正注），另 `03_kbase_csf/01_uapi_abi_diff.md` 一处补"其发布时的"限定；`00_reference/third_party/` 外部文档原文不改（D-014） |
 | 2026-11-16 | **U4-24 实测整合（a 闭合 / b 开放）** | `stage4: close U4-24a with device module identity`：用户执行模块身份脚本并回传纯文本。①**18 个 `.ko` 身份全取**：路径 / 大小 / SHA256 / vermagic / `srcversion` / sysfs Build ID；vermagic 全部 `6.6.118-android15-8-**g54a15cf3acba**-4k`；②**推翻一条项目级事实**——`6.6.143` 是**第三方运行内核**，原厂内核应为 `6.6.118-g54a15cf3acba`（三层版本，新决策 D-020）；③**14/15 个模块与仓库基线（OS3.0.305.0 / `g57e634f35c1b`）字节数及 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**（D-022）；④**发现运行内核绕过 vermagic 校验**（15 个串不符仍装载）→ "装载成功"不构成 ABI 证据（D-021）；⑤**"`ged` 差 409 KB"连方向都错**：两侧文件同为 1,093,352 B；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm` / `mtk_cg_peak_power_throttling` / `mtk_smmu_qos`）；⑦修脚本 v1.1 的 `ged$` 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**。**注**：上文 2026-11-15 两条中的"vermagic 118 vs 143"与"684,032 B"表述已被本轮推翻，保留原文以留痕（D-012）|
+| 2026-11-16 | **Stage 4 收尾核验** | `stage4: close remaining audit items with source-level verification`：新增 [`05/09_stage4_closure.md`](05_userspace_firmware/09_stage4_closure.md)。**四处更正**：①**撤回"运行内核绕过 `same_magic()`"**——`CONFIG_MODVERSIONS` 下 release 串本就不参与比较（v6.6 `version.c:88-96`），装载合法、无需补丁；②**找出真正的绕过开关** `bypass-kernel`（改 `bad_version` 为 `return 1`，默认关闭；2026-08-29→10-30 门控 `== 'true'` 对布尔输入恒失效），U4-25 拆 a/b/c；③**`uname -v` 的日期不是构建时间**（由 `os_patch_level` 派生为 `${YM}-05 04:20:00 UTC`，实测串逐字段吻合）；④**padding 强制校验实为 15 处**（原文"两处"只读了前 20 个定义），覆盖 `CS_QUEUE_REGISTER`/`CS_QUEUE_GROUP_CREATE*` → R-C2 由"tiler 失效"上调为"GPU 不可用"。另核：R56 交付包 23 条目 **0 个固件**（U4-12 属商业阻断）、`/proc/modules` taint 无 `F`（未强制装载）。**计数 27/5/4/3 → 27/5/5/3**；D-021 改写，新增 D-023/D-024/D-025 |

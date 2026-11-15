@@ -213,7 +213,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | 判据 | 仓库基线 15 个 `.ko`（OS3.0.305.0） | 设备 18 个 `.ko`（OS4.0.3.0） | 结论 |
 | --- | --- | --- | --- |
 | vermagic（**决定性**） | `6.6.118-android15-8-**g57e634f35c1b**-4k …` | `6.6.118-android15-8-**g54a15cf3acba**-4k …` | **同 sublevel、不同提交 → 不是同一构建** |
-| 运行内核 | — | `6.6.143-android15-8-gf9aa2fec23c3-4k`（第三方） | 与两者都不等；**装载成功说明校验被绕过** |
+| 运行内核 | — | `6.6.143-android15-8-gf9aa2fec23c3-4k`（第三方） | 与两者都不等；~~装载成功说明校验被绕过~~ → **2026-11-16 更正**：`CONFIG_MODVERSIONS` 下 `same_magic()` 本就忽略 release 串，装载合法（`09` §2） |
 | 文件字节 | 15 个 | 18 个 | **14 个两侧完全相同**；仅 kbase +17,640 B；3 个仓库无 |
 | `.text` 节 | 见 `08` §3.7.1 | 同上 | **14 个逐字节相等**；kbase 差 6,788 B |
 | `__versions` 节 | 同上 | 同上 | **14 个逐字节相等**；kbase 513 vs 514 条 |
@@ -231,7 +231,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 
 > **反向可反驳条件**：若设备 kbase 的 `.text` 与 `__versions` 也与仓库相等，则"kbase 实质差异"被推翻——实测否证了这一点（+6,788 B / +1 条）。
 >
-> **上一版的一处逻辑错误（留痕）**：原文写"若设备 vermagic 为 `6.6.118-…` 则本条推翻，但那意味着 `modversions` 校验被绕过，**与 Android init 的加载方式不符**"。这句的后半段是错的：vermagic 校验在**内核** `load_module()` 的 `same_magic()` 里执行，`init` 只是发起 `finit_module()` 调用；**init 的行为不能排除内核被 patch**。实测正是这一情形。
+> **上一版的一处逻辑错误（留痕）**：原文写"若设备 vermagic 为 `6.6.118-…` 则本条推翻，但那意味着 `modversions` 校验被绕过，**与 Android init 的加载方式不符**"。这句的后半段是错的：vermagic 校验在**内核** `load_module()` 的 `same_magic()` 里执行，`init` 只是发起 `finit_module()` 调用；**init 的行为不能排除内核被 patch**。~~实测正是这一情形。~~ → **2026-11-16 再更正**：实测**并未**证明内核被 patch；`CONFIG_MODVERSIONS` 下 `same_magic()` 原生跳过 release 串，装载不需要补丁（`09` §2）。本条留痕中被证明正确的只有"init 的行为不能作判据"这一点。
 
 ### 3.5 18 个 GPU 相关 `.ko` 的身份台账（[D·A]，2026-11-16 00:04）
 
@@ -615,7 +615,7 @@ DDK_BUILD_ID:   NOT_FOUND
 | （新增）"DDK 版本代次未知" | ✅ **已取**：`r49p1-03bet0`，与 kbase 同串 | §5.4 |
 | （新增）"设备模块身份未知"（U4-24a） | ✅ **已取**：18 个文件路径/大小/SHA256/vermagic/srcversion | §3.5 |
 | （新增）"设备内核 = 6.6.143" | ⚠️ **证伪**：6.6.143 是**第三方运行内核**；原厂内核应为 `6.6.118-g54a15cf3acba` | §2 第 4 条、`08` §3.1 |
-| （新增）"装载成功 = ABI 兼容" | ⚠️ **进一步削弱**：该内核绕过 vermagic 校验，装载成功不构成 ABI 证据 | `08` §3.7.4 |
+| （新增）"装载成功 = ABI 兼容" | ⚠️ **需分层**：装载证明"被 import 的符号 CRC 一致"（前提 `check_version` 未被打补丁），但不证明与 R56 兼容。原写"该内核绕过 vermagic 校验"已撤回 | `08` §3.7.4、`09` §2–§3 |
 
 ---
 
@@ -673,7 +673,7 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 - 为什么不用"手写一行 `strings`"：模块路径**不是猜出来的**（`/vendor/lib64/modules` 只是常见位置之一，本机实际为 `/vendor_dlkm/lib/modules`），已有采集也没记录过路径。因此改为一次受控采集。
 - 执行方式：手机端 aShell You + root，`sh /data/local/tmp/c.sh`（脚本 `tools/collect_gpu_module_identity.sh`，指南 `tools/README_gpu_module_identity.md`）。
 - 结果：18 个文件的路径/大小/SHA256/vermagic/`srcversion`/sysfs Build ID 全部取得，见 §3.5。
-- **读法（实测结论）**：vermagic 为 **`6.6.118-android15-8-g54a15cf3acba-4k …`**——既非仓库基线的 `g57e634f35c1b`，也非运行内核的 `6.6.143-gf9aa2fec23c3`，属判定矩阵的**第三分支**。由此确认两件事：①设备模块是原厂 OTA（`OS4.0.3.0`）的 6.6.118 构建；②运行内核**绕过了 vermagic 校验**（否则不可能装载）。判定与后果见 `08` §3.6.4、§3.7.4。
+- **读法（实测结论）**：vermagic 为 **`6.6.118-android15-8-g54a15cf3acba-4k …`**——既非仓库基线的 `g57e634f35c1b`，也非运行内核的 `6.6.143-gf9aa2fec23c3`，属判定矩阵的**第三分支**。由此确认两件事：①设备模块是原厂 OTA（`OS4.0.3.0`）的 6.6.118 构建；②~~运行内核**绕过了 vermagic 校验**（否则不可能装载）~~ → **2026-11-16 撤回**：`CONFIG_MODVERSIONS` 下 release 串本就不参与比较，装载合法。判定与后果见 `08` §3.6.4、§3.7.4 与 `09` §2。
 - **子项拆分**：U4-24a = 身份 → **✅ 已闭合**；U4-24b = 数值（`__ksymtab` CRC / kCFI 期望常量）→ **开放**，但范围已收窄到 kbase（`08` §3.7.6）。
 - **下一步最小动作**（若要推进 b）：设备端 `readelf -x __versions /vendor_dlkm/lib/modules/ged.ko`，回传纯十六进制文本（约 96 KB），即可判定其余 14 个模块的 CRC 能否整体沿用。
 

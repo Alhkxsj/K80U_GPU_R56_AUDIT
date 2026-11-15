@@ -62,6 +62,7 @@
 | 6 | `06_abi_compatibility_matrix.md` | 见下 | 见下 | 见下 | 04-F 四组合矩阵（修订版） |
 | 7 | **`07_device_evidence.md`** | 见下 | 见下 | 见下 | **新增**：真机证据登记与三件套解析（含来源前置） |
 | 8 | **`08_kernel_provenance_audit.md`** | 见下 | 见下 | 见下 | **新增**：第三方 GKI 环境下的设备证据来源审计 |
+| 8b | **`09_stage4_closure.md`** | 见下 | 见下 | 见下 | **新增（本文件）**：Stage 4 收尾核验——四处更正（`same_magic` 语义 / 真正的绕过开关 / `uname -v` 含义 / padding 门槛数量）与剩余阻断清单 |
 | 9 | `README.md` | — | — | — | 交付说明 |
 | 10 | `tools/collect_device.sh` | 93 | 3,698 | `dac394480c017adb` | 只读采集脚本（首轮，adb 方式） |
 | 11 | **`tools/collect_stage4_p0.sh`** | 284 | 11,547 | `b4083e0158748959` | **新增**：P0 最小只读采集（**手机端，无 adb**）；固件前 8 字节 + DDK 版本串；工具自检；失败报因 |
@@ -142,14 +143,15 @@
 | --- | :---: | :---: | --- |
 | `01` | ✅ 已提交（`efd8547` + 多轮修订） | ✅ 路径类 + 固件头 | U4-01 已闭合；U4-04 版本代次已取 |
 | `02` | ✅ | ✅ **核心已闭环** | 固件头字节已实测：`03`/`00` → 0.3（§3.0.5） |
-| `03` | ✅ | ⚠️ 部分 | 实体+依赖+**版本代次**闭合；padding/props 行为未闭合 |
+| `03` | ✅ | ⚠️ 部分 | 实体+依赖+**版本代次**闭合；**padding 门槛已定量（15 强制）**、props 机制已明，DDK 行为未闭合（`09` §5） |
 | `04` | ✅ | ⚠️ 部分 | 存在性闭合；`api_version`/机制未闭合 |
 | `05` | ✅ | ⚠️ 部分 | 依赖图闭合；bootloop 未闭合（P0） |
 | `06` | ✅ | ⚠️ 部分 | 矩阵结论稳定；**组合 B 升为实测否决** |
 | `07` | ✅ | — | 本文件即证据登记，不含独立结论 |
-| `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵 |
+| `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵；**§3.7.4 已于 v1.7 改写** |
+| **`09`** | ✅ | — | **新增**：Stage 4 收尾核验（四处更正 + 阻断清单 + 最终裁定 B） |
 
-> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项 UNKNOWN 中 **5 项闭合**（另有 3 项部分闭合），P0 由 4 降为 3。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
+> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项 UNKNOWN 中 **5 项闭合、5 项部分闭合**，P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
 ### 3.3 来源归属状态（A / B / C）
 
@@ -254,12 +256,23 @@ for f in $R49/csf/mali_kbase_csf_firmware.c $R56/csf/mali_kbase_csf_firmware.c; 
 # 期望：r56p0 多 CSF_FIRMWARE_ENTRY_TYPE_PAGE_FAULT_CNT
 ```
 
-### 4.8 padding 校验的兼容让步
+### 4.8 padding 校验的兼容让步（**2026-11-16 更正：不是"让步"，是分层**）
 
 ```bash
+# ① 看"替用户态清零"的 5 个（兼容让步）
 sed -n '152,167p' $R56/mali_kbase_ioctl_helpers.h
 # 期望：注释 "padding bytes are set as zero here on behalf on user space"
+
+# ② 数清 48 个钩子的分类（28 空 / 5 清零 / 15 强制）
+grep -c 'check_padding_KBASE_IOCTL' $R56/mali_kbase_ioctl_helpers.h
+grep -o 'return 0;' $R56/mali_kbase_ioctl_helpers.h | wc -l
+
+# ③ 指出强制集里的 CS 热路径（这是真正的风险）
+grep -n 'check_padding_KBASE_IOCTL_CS_QUEUE_REGISTER\|check_padding_KBASE_IOCTL_CS_QUEUE_GROUP_CREATE' \
+  $R56/mali_kbase_ioctl_helpers.h
 ```
+
+> **原 §4.8 只展示了第 ① 步**，于是得出"padding 不构成门槛"。加上 ②③ 后结论相反：**15 个强制校验，含 CS 队列与 CSG 注册**。详见 `09` §5、`03` §9.4。
 
 ### 4.9 dma-buf 依赖
 
@@ -346,7 +359,8 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | **协商 ≠ 校验** | 把 `min()` 当成版本校验 | 读 `kbase_api_handshake` 全文（`03` §1.5） |
 | **实测 ≠ 原厂实测** | 把 B 类（第三方内核运行时）写成"原厂内核实测" | 查 `u:r:ksu:s0` + 安装范围（`08` §2.5） |
 | **装载 ≠ 同源** | 把"15 个 `.ko` 已装载"写成"仓库 15 个 `.ko` 已装载" | 设备 vermagic `6.6.118-…-g54a15cf3acba` vs 仓库 `6.6.118-…-g57e634f35c1b`（`08` §3.7） |
-| **装载 ≠ 兼容**（本轮新增） | 把"模块装载成功"当作"ABI 兼容" | 该内核**绕过 `same_magic()`**：串不符仍装载（`08` §3.7.4） |
+| **装载 ≠ 兼容** | 把"模块装载成功"当作"ABI 兼容" | 装载只覆盖被 import 的符号 CRC（且前提 `check_version` 未被打补丁），不覆盖与 R56 的兼容（`09` §3） |
+| **"串不符" ≠ "有补丁"**（2026-11-16 更正） | 看到 vermagic 串与内核不符就断言"内核绕过校验" | `CONFIG_MODVERSIONS` 下 `same_magic()` 原生忽略 release 串（`09` §2） |
 | **同大小 ≠ 同文件**（本轮新增） | 看到 `ged.ko` 两侧同为 1,093,352 B 就认为同源 | SHA256 不同；vermagic 等长替换不改文件长度（`08` §3.2） |
 | **三个内核版本**（本轮新增） | 只写"设备内核 6.6.143" | 运行/原厂/仓库基线三者不同（`08` §3.7.2） |
 | **补丁 ≠ 改 GPU 驱动** | 把第三方调度/调频补丁的影响写成"GPU 驱动被改" | GKI `common/` 不含 mali，补丁结构上改不到（`08` §4.1） |
@@ -355,14 +369,14 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项，闭合 5 项，部分闭合 **4** 项）
+### 6.1 UNKNOWN 汇总（27 项，闭合 5 项，部分闭合 **5** 项）
 
 | 优先级 | ID | 内容 | 状态 |
 | --- | --- | --- | --- |
 | **P0** | ~~U4-01~~ | 原厂固件 header 实际值 | ✅ **闭合**：`03`/`00` → 0.3（`07` §4.5） |
-| **P0** | U4-04 | DDK 自称 UK ABI / padding 清零 / props 严格校验 | 部分闭合（**版本代次 `r49p1-03bet0` 已取**；padding/props 开放） |
+| **P0** | U4-04 | DDK 自称 UK ABI / padding 清零 / props 严格校验 | 部分闭合（版本代次 `r49p1-03bet0` 已取；**padding 门槛已定量 15 处**、**props 机制已明**；DDK 行为仍 [U]）；**风险等级已上调**，见 `09` §5 |
 | **P0** | U4-10 | GPU 失败后是否 bootloop | 开放 |
-| **P0** | U4-12 | R56p0 固件是否匹配 G925 MC12 | 开放 |
+| **P0** | U4-12 | R56p0 固件是否匹配 G925 MC12 | **阻断**：交付包 23 条目中 0 个固件（商业交付件），见 `09` §6 |
 | P1 | U4-02 | 原厂固件运行时 GLB 版本 | 开放 |
 | P1 | U4-11 | 原厂固件 GLB 尾部版本号 | 开放 |
 | P1 | U4-14 | DDK 是否用被删的 5 个 ioctl | 开放 |
@@ -370,8 +384,8 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | P1 | U4-17 | 薄壳 `api_version` / 加载机制 | 开放 |
 | P1 | **U4-22** | `libged` 失效对 mapper/HWC 的传导 | **新增开放** |
 | P1 | **U4-24** | 设备侧 GPU `.ko` 的路径 / 文件大小 / SHA256 / vermagic / srcversion（a）；`__ksymtab` CRC 与 kCFI 常量（b） | **a：✅ 已闭合**（18 个文件全取，`07` §3.5）；**b：开放**，范围收窄至 kbase（`08` §3.7.6） |
-| P1 | **U4-25** | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否被绕过） | **新增开放**（已确认 `same_magic` 被绕过，见 `08` §3.7.4） |
-| P2 | **U4-26** | 设备当前 boot 是否即所链接 run 的产物 | **新增开放**（时间戳不可判） |
+| P1 | **U4-25** | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否被绕过） | **a ✅ 闭合**（vermagic 串不符是原生语义，不需绕过，`09` §2）；**b 开放**（`bad_version` 补丁，默认关闭，运行态不可观测）；c 未测 |
+| P2 | **U4-26** | 设备当前 boot 是否即所链接 run 的产物 | 开放（`uname -v` 是补丁月常量，零信息量，`09` §4；缺内核 `build-id`） |
 | P2 | **U4-27** | `/vendor` 是否被 KSU/NoMount overlay 覆盖 | **新增开放**（未采 mount 表） |
 | P2 | U4-06/07/16/19/20/21 | 见各章 | 部分闭合 |
 | P3 | U4-13/18/**U4-23** | NX 字段 / 同批构建 / gpud 同名符号 | 开放或判据不足 |
@@ -445,4 +459,5 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-15 | **v1.3** | **P0 补采工具**（`stage4: add minimal P0 device evidence collector`）：新增 `tools/collect_stage4_p0.sh`（284 行，POSIX sh，只读，无 adb，工具自检，失败报因，版本串缺失输出 `NOT_FOUND` 而非 `INCOMPATIBLE`）与 `tools/README_stage4_p0.md`（218 行，aShell You 执行指南 + 判读表 + 兜底命令）。**仅为采集准备，U4-01 / U4-04 状态未变（仍 UNKNOWN）**；脚本已在 `dash`/`bash` 下通过语法检查并对 4 条分支做伪造文件演练，**未在真机运行** |
 | 2026-11-15 | **v1.4** | **P0 补采执行与整合**（`stage4: close U4-01 with firmware header bytes, advance U4-04`）：用户回传 `stage4_p0_20261115_232021.txt`。**U4-01 闭合**：固件前 16 字节 `6e 3a f1 c3 03 00 00 00 00 00 0a 03 00 00 00 00`，header **0.3**（§2.3、`07` §4.5）。**U4-04 部分闭合**：DDK 内含 `r49p1-03bet0`，与 kbase `MODULE_VERSION` 同串 → 原厂三方配套（`07` §5.4）。组合 B 由「[E1]+[E2] 推理否决」升为「[E1]+[D·A] 实测否决」。计数 27/4/3/4 → **27/5/3/3**。新增 D-016 / D-017，D-008 转为生效。**新增两条禁止表述**：`version_hash` ≠ GLB 版本；"DDK 实测宣称 1.30"（应为 release 映射） |
 | 2026-11-15 | **v1.5** | **U4-24 采集工具 + 三处口径更正**（`stage4: add GPU module identity audit`）：新增 `tools/collect_gpu_module_identity.sh`（396 行，POSIX sh，只读，无 adb，路径多根搜索，缺工具输出 `NOT_AVAILABLE`）与 `tools/README_gpu_module_identity.md`（199 行）。`08` 新增 **§3.6**（U4-24 判定矩阵、模块集合映射、kCFI/CRC 重导依赖分类、子项 a/b 拆分）；修正三处口径：①`lsmod` size 是 `core_layout.size` 非文件大小（取消"差 409 KB"的相减表述）②设备多出 `mtk_ghpm`，仓库无此文件，集合不对称 ③`met_*`「未装载」受筛选口径限制。**计数不变（27/5/3/3），U4-24 仍未闭合** |
-| 2026-11-16 | **v1.6** | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户执行 `collect_gpu_module_identity.sh` 并回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**（路径/大小/SHA256/vermagic/srcversion/sysfs Build ID），vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；②**发现三层内核版本**：运行 `6.6.143-gf9aa2fec23c3`（第三方）／原厂推定 `6.6.118-g54a15cf3acba`／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）——**此前把 6.6.143 当"设备内核"是错的**；③**14/15 模块字节数与 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**；④**发现运行内核绕过 vermagic 校验**（15 个模块串不符仍装载）→ "装载成功"不再构成 ABI 证据；⑤"`ged` 差 409 KB"**彻底作废**（两侧文件同为 1,093,352 B）；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm`/`mtk_cg_peak_power_throttling`/`mtk_smmu_qos`）；⑦修脚本 v1.1 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**（U4-24 转入部分闭合，P0 不变） |
+| 2026-11-16 | **v1.6** | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户执行 `collect_gpu_module_identity.sh` 并回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**（路径/大小/SHA256/vermagic/srcversion/sysfs Build ID），vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；②**发现三层内核版本**：运行 `6.6.143-gf9aa2fec23c3`（第三方）／原厂推定 `6.6.118-g54a15cf3acba`／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）——**此前把 6.6.143 当"设备内核"是错的**；③**14/15 模块字节数与 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**；④~~**发现运行内核绕过 vermagic 校验**~~（**已于 v1.7 撤回**：那是 `CONFIG_MODVERSIONS` 的原生语义）；⑤"`ged` 差 409 KB"**彻底作废**（两侧文件同为 1,093,352 B）；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm`/`mtk_cg_peak_power_throttling`/`mtk_smmu_qos`）；⑦修脚本 v1.1 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**（U4-24 转入部分闭合，P0 不变） |
+| 2026-11-16 | **v1.7** | **Stage 4 收尾核验**（`stage4: close remaining audit items with source-level verification`）：新增 **`09_stage4_closure.md`**（Stage 4 最终裁定 + 四处更正 + 阻断清单）。①**撤回"运行内核绕过 `same_magic()`"**——`CONFIG_MODVERSIONS` 下该函数本就跳过 release 串（v6.6 `version.c:88-96`），装载合法；②**找出真正的开关**：`bypass-kernel` 把 `version.c` 的 `bad_version:` 改 `return 1`，默认关闭，2026-08-29→10-30 门控 `== 'true'`（布尔对字符串）恒失效；U4-25 拆 a/b/c；③**`uname -v` 的日期是补丁月常量**（`${os_patch_level}-05 04:20:00 UTC`），不能作构建时间；④**padding 强制校验实为 15 处**（原写"两处"，只读了 `mali_kbase_ioctl_helpers.h` 前 20 个定义），R-C2 由"tiler 失效"上调为"GPU 不可用"；⑤核 R56 交付包 23 条目 **0 个固件**（U4-12 属商业阻断）；⑥`/proc/modules` taint 仅 `(O)`、无 `F`。**计数 27/5/4/3 → 27/5/5/3**；D-021 改写，新增 D-023/D-024/D-025 |

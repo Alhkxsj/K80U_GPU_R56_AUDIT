@@ -247,17 +247,18 @@
 
 ---
 
-### D-021 · 运行内核绕过了 vermagic 校验，因此「装载成功」不构成 ABI 证据
+### D-021 · ~~运行内核绕过了 vermagic 校验~~ → **（2026-11-16 改写）载入判定分两道关卡：vermagic 段比较 + 符号 CRC**
 
 | 项 | 内容 |
 | --- | --- |
-| **决策** | 在**当前运行内核**上，"模块能 insmod / 能跑"**不得**作为 ABI 兼容证据。任何基于该环境的验证结论，必须显式标注此前提；Stage 5 若要在实机验证，须换到未打该类补丁的内核，或记录"结果可能被补丁掩盖"。 |
-| **背景** | 15 个已装载模块的 `VERMAGIC_MATCHES_UNAME_R` **全部为 `NO`**（模块串 `6.6.118-…-g54a15cf3acba`，内核 `6.6.143-…-gf9aa2fec23c3`）。Linux 6.6 的 `same_magic()` 是逐字符比较、不符即 `-ENOEXEC`、无 fallback。串明确不符却全部装载成功 → 内核必然存在绕过补丁（KernelSU/SukiSU 系常见）。 |
-| **背景补充** | `check_version()`（符号 CRC 校验）是另一道独立关卡。装载未报 `disagrees about version of symbol`，说明**要么 CRC 一致、要么该检查也被绕过**，两者无法从现有证据区分 → 归入 U4-25。 |
-| **证据来源** | `05/08` §3.7.4；`05/07` §3.5（18 个模块的 vermagic 与装载状态） |
-| **证据等级** | **[D·A]**（vermagic 与装载状态均为实测）+ **[E2]**（`same_magic` 行为来自内核源码常识） |
-| **状态** | 生效 |
-| **再审议** | 若在设备上 `dmesg` 未发现绕过痕迹，或对第三方内核源码（`f9aa2fec`）核查后确认未改 `kernel/module/`，则本条被推翻——但"串不符仍装载"这一实测事实本身无法被解释，故推翻概率极低 |
+| **决策（现行）** | ①"模块能装载"**不得**直接作为 ABI 兼容证据，但它**可以**作为"被 import 的符号 CRC 与运行内核一致"的证据——**前提**是该内核的 `check_version()` 未被打过 `allow_version_mismatch` 补丁。②任何基于第三方便携内核的验证结论，必须显式标注该前提。③Stage 5 实机验证的内核须能证明 `kernel/module/version.c` 的 `bad_version:` 仍为 `return 0`（不是"换一个没打补丁的内核"——那种内核不存在）。 |
+| **背景（原判断，已撤回）** | 原文："15 个模块 `VERMAGIC_MATCHES_UNAME_R` 全为 `NO`，而 `same_magic()` 逐字符比较、不符即 `-ENOEXEC`，故内核必然打了绕过补丁。" |
+| **为何撤回** | `same_magic()` 在 `CONFIG_MODVERSIONS=y` 且模块带 `__versions` 时**跳过第一个空格之前的 release 串**，只比较 flags 段（v6.6 `kernel/module/version.c:88-96`，调用点 `main.c:2089`）。本机两侧 flags 段逐字符相同（`SMP preempt mod_unload modversions aarch64`）→ **合法装载，无需任何补丁**。原文的"`same_magic()` 逐字符比较"是把 `!CONFIG_MODVERSIONS` 分支的行为当成了通用行为。 |
+| **真正会掩盖 CRC 错误的开关** | 构建仓库的 `bypass-kernel` action：`sed` 把 `version.c` 的 `bad_version:` 内 `return 0` 改为 `return 1`；输入 `allow_version_mismatch`（boolean，默认 `false`）；**2026-08-29→2026-10-30 期间门控写作 `== 'true'`（布尔对字符串），恒不生效**，2026-10-30 `a60756073` 修复。 |
+| **证据来源** | `09_stage4_closure.md` §2、§3；`05/08` §3.7.4；内核源码 v6.6 `version.c`/`main.c`；`github.com/JiangXue5/GKI_KernelSU_SUSFS` 的 action 与提交历史 |
+| **证据等级** | **[E1]**（内核源码 + 构建脚本文本） |
+| **状态** | **改写生效**（原表述标注为已撤回） |
+| **再审议** | 若发现该工作流之外还有别的版本校验补丁源，或设备内核的 `bad_version:` 被证实为 `return 1`，则第①条退化为"完全不可作证据" |
 
 ---
 
@@ -275,7 +276,50 @@
 
 ---
 
+### D-023 · U4-25 拆为 a/b/c：vermagic 语义（已闭）／`check_version` 补丁（待判）／其它差异面（未测）
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | 不得再把 U4-25 当作单一问题。**25a** = "是否绕过 vermagic 强校验" → **已闭合：否，且不需要**；**25b** = "是否绕过 `check_version()`" → 只能靠构建输入或内核二进制判定，**运行态不可观测**；**25c** = 导出符号集 / CFI / 调度差异 → 未测。 |
+| **背景** | 25a 的判据见 D-021。25b 的判据：`bypass-kernel` action 只改 `version.c` 的 `bad_version:`；该补丁在 CRC **匹配**时与原生行为**完全相同**，故"能装载"无法区分是否打过补丁。 |
+| **判别方法** | ①查该次构建的 `allow_version_mismatch` 输入（需仓库权限）；②比对内核二进制的 `bad_version` 路径；③若构建日期 ≤ 2026-10-30 且门控仍是 `== 'true'`，可直接判"未打"。 |
+| **证据来源** | `09_stage4_closure.md` §3；`github.com/JiangXue5/GKI_KernelSU_SUSFS` action 原文与提交 `32ba07352`/`02b1ae742`/`a60756073` |
+| **证据等级** | **[E1]** |
+| **状态** | 生效 |
+| **再审议** | 25b 一旦判定，U4-25 可整体转入"部分闭合（a/b 闭、c 开）" |
+
+---
+
+### D-024 · `uname -v` 的日期是补丁月派生常量，**不得**作为构建时间证据
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | 禁止用 `uname -v` / `/proc/version` 的日期判定构建时间、判断"设备是否为某次 CI 产物"。它只能作为 **`os_patch_level` 的正向核对**。 |
+| **背景** | 工作流 `Set Build Timestamp from Kernel Commit` 把时间戳硬编码为 `"${os_patch_level}-05 04:20:00 UTC"` → `SOURCE_DATE_EPOCH`；GKI `build/_setup_env.sh:123` 再 `export KBUILD_BUILD_TIMESTAMP="$(date -d @${SOURCE_DATE_EPOCH})"`。设备实测 `Mon Oct  5 04:20:00 UTC 2026` 与之逐字段吻合，且"`Oct  5`"双空格正是第 3 步重格式化的痕迹（工作流本身用 `%d` 会得到 `Oct 05`）。 |
+| **背景补充** | 由此，`os_patch_level=2026-10` 可与 `uname -v` 互证；但**任何**同参数构建都会产生同一串，故不能确定"哪一次 run"。U4-26 因此需要一个新判据（内核 `build-id` 与产物比对）。 |
+| **证据来源** | `09_stage4_closure.md` §4；`build.yml`（`9f91301d3`）时间戳步骤；`android.googlesource.com/kernel/build` `_setup_env.sh` |
+| **证据等级** | **[E1]**（脚本）+ **[D·B]**（设备串） |
+| **状态** | 生效 |
+| **再审议** | 若某次构建不使用该模板（例如手工构建），本条不适用 |
+
+---
+
+### D-025 · padding 强制校验实为 15 处，覆盖 CS 主链路；R-C2 由"降级"上调为"不可用"
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | 组合 C 的 padding 风险**不得**再表述为"仅 tiler heap 可能失效"。正确表述：48 个 `check_padding_*` 中 **15 个强制**，含 `CS_QUEUE_REGISTER` / `CS_QUEUE_REGISTER_EX` / `CS_QUEUE_GROUP_CREATE_1_6` / `_1_18` / `_1_35` / `CS_QUEUE_GROUP_TERMINATE` / `CS_TILER_HEAP_INIT(_1_13)`；若 1.30 DDK 不清零 padding，GPU **完全不可用**而非降级。 |
+| **背景** | `03` §9.2 原统计"只有两个真正检查"（`GET_DDK_VERSION` + `MEM_JIT_INIT`），依据行号仅覆盖文件前 20 个定义；全量 48 个定义重算后得出 28 空 / 5 清零 / 15 强制。 |
+| **为何重要** | 该风险是组合 C（r56p0 kbase + 原厂 DDK）的**单点致命项**，且判定成本极低（一条 `strace -e ioctl` 或一次反编译），应优先做。 |
+| **证据来源** | `02_r56_source/.../mali_kbase_ioctl_helpers.h`（48 个定义，逐函数分类）；分派点 `mali_kbase_core_linux.c:1808` 等 |
+| **证据等级** | **[E1]** |
+| **状态** | 生效 |
+| **再审议** | 若 DDK 实测清零 padding，则本条风险降为 0（但"门槛存在"这一事实不变） |
+
+---
+
 ## D. 决策索引
+
 | ID | 主题 | 状态 | 再审议 |
 | --- | --- | --- | --- |
 | D-001 | 只读审计工程 | 生效 | 否 |
@@ -298,8 +342,11 @@
 | D-018 | 模块身份按文件判定；`lsmod` size ≠ 文件大小 | 生效 | 否 |
 | D-019 | kCFI（类型 oracle）vs CRC（数值 oracle） | 生效（子项 a 已闭合） | 新证据即可 |
 | D-020 | 三层内核版本，不得只写一个 | 生效 | 新证据即可 |
-| D-021 | 该内核绕过 vermagic 校验 → 装载成功非 ABI 证据 | 生效 | 新证据即可 |
+| D-021 | ~~绕过 vermagic 校验~~ → **载入分两道关卡：vermagic 段 + 符号 CRC**（原表述已撤回） | **改写生效** | 新证据即可 |
 | D-022 | REA 重导范围收窄至 kbase | 生效 | 新证据即可 |
+| D-023 | U4-25 拆 a/b/c；`check_version` 补丁运行态不可观测 | 生效 | 25b 判定后 |
+| D-024 | `uname -v` 日期 = 补丁月常量，不得作构建时间证据 | 生效 | 手工构建例外 |
+| D-025 | padding 强制校验 15 处，覆盖 CS 主链路 → R-C2 上调为"不可用" | 生效 | DDK 实测后 |
 
 ---
 
@@ -311,3 +358,4 @@
 | 2026-11-15 | **U4-01 闭合后更新**：新增 D-016（固件 header = 0.3 实测）、D-017（原厂三件同代配套）；**D-008 由「生效（条件性）」转为「生效」**，证据等级由 [E1]+[E2] 升为 [E1]+[D·A]。共 17 条 |
 | 2026-11-15 | **U4-24 准备轮**：新增 D-018（模块身份按文件判定，`lsmod` size ≠ 文件大小）、D-019（kCFI 类型 oracle vs `__versions` 数值 oracle，U4-24 拆 a/b）。**D-007 结论不变**，但其辅助判据的证据力按 D-018 下调为"方向参考"。共 19 条 |
 | 2026-11-16 | **U4-24 实测轮**：新增 D-020（三层内核版本：运行 / 原厂推定 / 仓库基线，不得只写一个）、D-021（运行内核绕过 `same_magic()`，装载成功不构成 ABI 证据）、D-022（REA 重导范围由 15 个模块收窄至 kbase）。**D-007 结论不变但依据改写**（[E1]+[E2] → [D·A]+[E1]），原"体积差 409 KB"作废。共 22 条 |
+| 2026-11-16 | **Stage 4 收尾核验轮**：**D-021 改写**（"绕过 `same_magic()`"证伪——`CONFIG_MODVERSIONS` 下 release 串本就不比，装载合法；真正会掩盖 CRC 错误的是 `bad_version` 补丁，默认关闭）；新增 D-023（U4-25 拆 a/b/c，`check_version` 补丁在运行态不可观测）、D-024（`uname -v` 是补丁月派生常量，不得作构建时间）、D-025（padding 强制校验 15 处，R-C2 上调为"GPU 不可用"）。共 25 条 |
