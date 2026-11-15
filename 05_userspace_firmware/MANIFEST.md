@@ -20,6 +20,7 @@
 | TASK 04 来源审计基线 | `a5b9a51` → 提交 `stage4: audit third-party GKI device evidence provenance` |
 | TASK 04 P0 补采工具基线 | `0c1d1dd` → 提交 `stage4: add minimal P0 device evidence collector`（`65006de`） |
 | TASK 04 P0 补采整合基线 | `65006de` → 提交 `stage4: close U4-01 with firmware header bytes, advance U4-04` |
+| TASK U4-24 采集工具基线 | `e3d7bc0` → 提交 `stage4: add GPU module identity audit`（**工具就绪，未在真机运行**） |
 | 设备运行时内核 | **第三方 GKI 构建**（KernelSU 补丁；GKI `android15-6.6`，源码提交 `f9aa2fec23c3…`，sublevel 143，patch `2026-10`）**[D·B]**+**[B]** |
 | 设备 ROM | HyperOS `OS4.0.3.0.XONCNM` / Android 17 / SDK 37 **[D·A]** |
 | 原厂基线 | `mali-r49p1-03bet0`（CSF UK ABI **1.30**）——真机 `/sys/module/.../version` 已实测一致 **[D]** |
@@ -62,9 +63,11 @@
 | 10 | `tools/collect_device.sh` | 93 | 3,698 | `dac394480c017adb` | 只读采集脚本（首轮，adb 方式） |
 | 11 | **`tools/collect_stage4_p0.sh`** | 284 | 11,547 | `b4083e0158748959` | **新增**：P0 最小只读采集（**手机端，无 adb**）；固件前 8 字节 + DDK 版本串；工具自检；失败报因 |
 | 12 | **`tools/README_stage4_p0.md`** | 234 | 8,547 | `001e85e8e235ad1b` | 手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令）+ **本机执行结果摘要** |
-| 13 | `MANIFEST.md` | 本文件 | — | — | — |
+| 13 | **`tools/collect_gpu_module_identity.sh`** | 396 | 17,644 | `d6ff5a2c0efebad2` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、无 `modinfo` 依赖、路径多根搜索、压缩/内建降级判定） |
+| 14 | **`tools/README_gpu_module_identity.md`** | 199 | 9,217 | `2238d43031af3108` | **新增**：手机执行指南 + 三行核心判读表 + `lsmod` 尺寸口径说明 + 兜底命令 + 失败排查 |
+| 15 | `MANIFEST.md` | 本文件 | — | — | — |
 
-> 行数 / 字节 / SHA256 由 `§4.11` 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
+> 行数 / 字节 / SHA256 由 §4.10 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
 
 ### 2.1 二进制资产
 
@@ -75,6 +78,7 @@
 | VINTF / init.rc | **未采集内容、未入库**（仅登记文件名与大小） |
 | 采集输出三件套 | **未入库**（仅登记哈希，见 §2.2） |
 | P0 补采输出（纯文本） | **已产生、未入库**：设备端 `/data/local/tmp/gpu_audit_p0/stage4_p0_20261115_232021.txt`，仅登记其内容摘要（§2.3）；**U4-01 已闭合 / U4-04 部分闭合** |
+| U4-24 模块身份输出（纯文本） | **尚未产生**。脚本会把结果写到设备端 `/data/local/tmp/gpu_audit_mod/stage4_mod_<ts>.txt`；回传后只登记摘要与哈希，**不登记正文**，**不含任何 `.ko`** |
 
 ### 2.2 设备采集输入登记（[D] 证据源）
 
@@ -125,7 +129,7 @@
 | `05` | ✅ | ⚠️ 部分 | 依赖图闭合；bootloop 未闭合（P0） |
 | `06` | ✅ | ⚠️ 部分 | 矩阵结论稳定；**组合 B 升为实测否决** |
 | `07` | ✅ | — | 本文件即证据登记，不含独立结论 |
-| `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论 |
+| `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵 |
 
 > **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项 UNKNOWN 中 **5 项闭合**（另有 3 项部分闭合），P0 由 4 降为 3。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
@@ -271,6 +275,25 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 >
 > **可选（非 P0）**：U4-24 模块 `vermagic` / `sha256sum`（见 `07` §10.3）；U4-27 `mount | grep -i overlay`。两者均只回传文本。**本次未执行**。
 
+### 4.12 U4-24 模块身份采集（**已就绪，未执行**）
+
+```bash
+# 手机端（aShell You，已 root）；只读，无 adb，输出纯文本
+su
+sh /data/local/tmp/c.sh          # c.sh = tools/collect_gpu_module_identity.sh
+cat /data/local/tmp/gpu_audit_mod/stage4_mod_*.txt
+```
+
+离线可先复核脚本语法：
+
+```bash
+sh -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh   # dash
+bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
+```
+
+> 输出中的关键三行：`VERMAGIC_CHECK:` / `VERMAGIC_MATCHES_UNAME_R:` / `FILE_SHA256:`。
+> **注意**：`LSMOD_SIZE_BYTES` 是运行时内存（`core_layout.size`，页对齐），**不是文件大小**，不可与仓库 `.ko` 字节数相减（`08` §3.6.2）。
+
 ---
 
 ## 5. 来源完整性
@@ -325,7 +348,7 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 | P1 | U4-15 | DDK 对 props 新 ID 的处理 | 开放 |
 | P1 | U4-17 | 薄壳 `api_version` / 加载机制 | 开放 |
 | P1 | **U4-22** | `libged` 失效对 mapper/HWC 的传导 | **新增开放** |
-| P1 | **U4-24** | 设备侧 GPU `.ko` 的 SHA256 / vermagic / 与官方镜像一致性 | **新增开放**（已证"非仓库构建"） |
+| P1 | **U4-24** | 设备侧 GPU `.ko` 的路径 / 文件大小 / SHA256 / vermagic / srcversion（a）；`__ksymtab` CRC 与 kCFI 常量（b） | **a：工具已就绪、待执行**；**b：未开始**（已证"非仓库构建"，见 `08` §3.6） |
 | P1 | **U4-25** | 第三方内核与原厂 boot 的运行时差异范围 | **新增开放** |
 | P2 | **U4-26** | 设备当前 boot 是否即所链接 run 的产物 | **新增开放**（时间戳不可判） |
 | P2 | **U4-27** | `/vendor` 是否被 KSU/NoMount overlay 覆盖 | **新增开放**（未采 mount 表） |
@@ -347,6 +370,7 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 - 未上传厂商二进制
 - 未进入 Stage 5
 - **未要求用户重跑已有采集项目**（三件套已足够支撑本轮全部结论）
+- **U4-24 采集脚本未在真机运行**（仅语法检查 + 5 条伪造分支演练）
 
 ---
 
@@ -367,7 +391,9 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 └── tools/
     ├── collect_device.sh          # 只读采集，不落地二进制（首轮，adb）
     ├── collect_stage4_p0.sh       # P0 最小采集（手机端，无 adb）
-    └── README_stage4_p0.md        # 手机执行指南与判读表
+    ├── README_stage4_p0.md        # 手机执行指南与判读表
+    ├── collect_gpu_module_identity.sh   # U4-24 模块身份采集（手机端，无 adb）
+    └── README_gpu_module_identity.md    # 该脚本的执行指南与判读表
 ```
 
 **不设** `firmware/`、`userspace/` 等二进制存放目录——本阶段不采集二进制。
@@ -397,3 +423,4 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 | 2026-11-15 | **v1.2** | **来源审计**（新增 `08`）：确认设备运行**第三方 GKI 内核**（KernelSU 补丁，`f9aa2fec`），非原厂 boot；建立 A/B/C 三类归属并重标 `01`/`07`/`06`；核验安装范围（仅 `boot`，`do.modules=0`，产物无 `.ko`/固件/`.so`）；判定设备 `.ko` 与仓库基线 `.ko` **非同一构建**（vermagic 118 vs 143）；定性补丁间接影响；新增 U4-24…U4-27（23→27 项）；增 [B]/[P] 两级证据与 `[D·A/B/C]` 细分 |
 | 2026-11-15 | **v1.3** | **P0 补采工具**（`stage4: add minimal P0 device evidence collector`）：新增 `tools/collect_stage4_p0.sh`（284 行，POSIX sh，只读，无 adb，工具自检，失败报因，版本串缺失输出 `NOT_FOUND` 而非 `INCOMPATIBLE`）与 `tools/README_stage4_p0.md`（218 行，aShell You 执行指南 + 判读表 + 兜底命令）。**仅为采集准备，U4-01 / U4-04 状态未变（仍 UNKNOWN）**；脚本已在 `dash`/`bash` 下通过语法检查并对 4 条分支做伪造文件演练，**未在真机运行** |
 | 2026-11-15 | **v1.4** | **P0 补采执行与整合**（`stage4: close U4-01 with firmware header bytes, advance U4-04`）：用户回传 `stage4_p0_20261115_232021.txt`。**U4-01 闭合**：固件前 16 字节 `6e 3a f1 c3 03 00 00 00 00 00 0a 03 00 00 00 00`，header **0.3**（§2.3、`07` §4.5）。**U4-04 部分闭合**：DDK 内含 `r49p1-03bet0`，与 kbase `MODULE_VERSION` 同串 → 原厂三方配套（`07` §5.4）。组合 B 由「[E1]+[E2] 推理否决」升为「[E1]+[D·A] 实测否决」。计数 27/4/3/4 → **27/5/3/3**。新增 D-016 / D-017，D-008 转为生效。**新增两条禁止表述**：`version_hash` ≠ GLB 版本；"DDK 实测宣称 1.30"（应为 release 映射） |
+| 2026-11-15 | **v1.5** | **U4-24 采集工具 + 三处口径更正**（`stage4: add GPU module identity audit`）：新增 `tools/collect_gpu_module_identity.sh`（396 行，POSIX sh，只读，无 adb，路径多根搜索，缺工具输出 `NOT_AVAILABLE`）与 `tools/README_gpu_module_identity.md`（199 行）。`08` 新增 **§3.6**（U4-24 判定矩阵、模块集合映射、kCFI/CRC 重导依赖分类、子项 a/b 拆分）；修正三处口径：①`lsmod` size 是 `core_layout.size` 非文件大小（取消"差 409 KB"的相减表述）②设备多出 `mtk_ghpm`，仓库无此文件，集合不对称 ③`met_*`「未装载」受筛选口径限制。**计数不变（27/5/3/3），U4-24 仍未闭合** |

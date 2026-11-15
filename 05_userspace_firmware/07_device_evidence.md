@@ -158,7 +158,7 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 | `mali_kbase_mt6991_r49` | ✅ 已装载 | refcount 77 |
 | `mali_mgm_mt6991_r49` | ✅ | |
 | `mali_prot_alloc_mt6991_r49` | ✅ | PMA |
-| `ged` | ✅ | 设备侧 `lsmod` 报 **684,032 B**（仓库基线 **1,093,352 B**，见 §3.4）；被 5 个模块引用 |
+| `ged` | ✅ | 设备侧 `lsmod` 报 **684,032 B** 运行时内存（**不是文件大小**，仓库文件为 **1,093,352 B**；口径差异见 `08` §3.6.2）；被 5 个模块引用 |
 | `mtk_gpufreq_mt6991` | ✅ | |
 | `mtk_gpufreq_wrapper` | ✅ | 被 9 个模块引用（含 kbase） |
 | `mtk_gpueb` | ✅ | 被 10 个模块引用（含 kbase） |
@@ -173,6 +173,11 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 
 **新增结论（TASK 03 未能观察到）**：三个 `met_*` 模块**在本机根本不装载**。因此 `04_mtk_platform/06_platform_retention_matrix.md` 中与 MET 相关的适配项，在本机型上**不构成风险面**；反之，任何"必须同步升级 MET"的担心可以撤回 **[D]**。
 
+> **两条口径补正（2026-11-15 U4-24 准备轮）**：
+>
+> 1. **"未装载"的观测口径**：上表依据的是 `lsmod | grep -iE "mali|gpu|ged|gpueb|gpufreq"` 的**过滤输出**。`met_gpu_*` 含 `gpu`，会被该模式命中；未出现即"未装载"。严格说是"在该筛选口径下未见"，全量 `/proc/modules` 采集可把它升级为"确认"（见 `08` §2.4 注 2）。
+> 2. **集合不对称**：设备除上表 12 个已装载模块外，还有 **`mtk_ghpm`**（被 `mtk_gpufreq_wrapper` 引用），而仓库 `vendor_dlkm/` **没有这个文件**。故"仓库 15 个 = 设备 15 个"不成立，详见 `08` §3.6.3。
+
 ### 3.3 引用方向：设备侧交叉印证 TASK 03 的"89 处正向引用"
 
 `lsmod` 的 used-by 列显示 `mali_kbase_mt6991_r49` 出现在以下模块的依赖列表中：`ged`、`mtk_gpufreq_wrapper`、`mtk_gpueb`、`mtk_gpu_hal`、`mtk_gpu_pdma_mt6991`。
@@ -185,8 +190,8 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJ
 
 | 判据 | 仓库基线 15 个 `.ko` | 设备运行内核 / 模块 | 结论 |
 | --- | --- | --- | --- |
-| vermagic | `6.6.118-android15-8-g57e634f35c1b-4k SMP preempt mod_unload modversions aarch64` | 内核 `6.6.143-android15-8-gf9aa2fec23c3-4k` | **不相等 → 基线 `.ko` 无法装载到当前内核** |
-| `ged` 体积 | 1,093,352 B | 684,032 B | 差 409 KB，排除同一二进制 |
+| vermagic（**决定性**） | `6.6.118-android15-8-g57e634f35c1b-4k SMP preempt mod_unload modversions aarch64` | 内核 `6.6.143-android15-8-gf9aa2fec23c3-4k` | **不相等 → 基线 `.ko` 无法装载到当前内核** |
+| `ged` 尺寸（**辅助，口径不同**） | 文件 **1,093,352 B** | `lsmod` 运行时 **684,032 B**（`core_layout.size`，167 页） | 方向一致（设备侧更小），但**两者不可相减**，见 `08` §3.6.2 |
 | `modversions` | 开启（vermagic 含 `modversions`） | 开启 | `.ko` 与内核版本串必须逐字符相等 |
 | 构建时间 | — | `Mon Oct 5 04:20:00 UTC 2026` | **不可作判据**：GKI 可复现构建常固定 `KBUILD_BUILD_TIMESTAMP` |
 
@@ -551,17 +556,23 @@ adb shell "grep -a -o -m 3 -E 'r[0-9]{2}p[0-9]-[0-9a-z]+' /vendor/lib64/egl/mt69
 - **实际结果**：第一条 **NOT_FOUND**（该字面模式不存在）；第二条 **`r49p1-03bet0`**。→ 由 release 串映射为 1.30。见 §5.4。
   - 这条"部分命中"本身就是重要信息：它说明 **DDK 不自报 UK 版本，只自报 release**。因此后续任何"DDK 宣称 N.N"的表述都必须写成"由 release 映射"，不能写成"库内读到"。
 
-### 10.3 缺口三（可选，非 P0）：模块构建代次（U4-24）
+### 10.3 缺口三（P1）：模块构建代次（U4-24）—— **工具已就绪，待执行**
 
-- 为什么需要：§3.4 已证明设备 `.ko` 与仓库基线 `.ko` **不是同一构建**。若 Stage 5 要用二进制级常量（CRC、kCFI 哈希），必须以设备构建为准。
-- 命令（**只回传文本，不 pull 二进制**）：
+- 为什么需要：§3.4 已证明设备 `.ko` 与仓库基线 `.ko` **不是同一构建**。若 Stage 5 要用二进制级常量（`__versions` CRC、kCFI 哈希），必须以设备构建为准。
+- 为什么不能用上面那种"手写一行 `strings`"的做法：模块路径**不是猜出来的**（`/vendor/lib64/modules` 只是常见位置之一），已有采集也没记录过路径。因此改为一次受控采集：
 
-```bash
-adb shell "for m in mali_kbase_mt6991_r49 ged; do echo \$m; strings -a /vendor/lib64/modules/\$m.ko | grep -m1 '^vermagic='; done"
-adb shell "sha256sum /vendor/lib64/modules/mali_kbase_mt6991_r49.ko /vendor/lib64/modules/ged.ko"
+```sh
+# 手机端（aShell You，已 root），只读，无 adb
+su
+sh /data/local/tmp/c.sh
 ```
 
-- 读法：vermagic 应为 `6.6.143-android15-8-gf9aa2fec23c3-4k …`；若如此，§3.4 的推论由 [E2] 升为 [D·C]。模块路径以 `modules.load.vendor` 实际值为准，常见为 `/vendor/lib64/modules/` 或 `/vendor/lib/modules/`。
+脚本：`tools/collect_gpu_module_identity.sh`；步骤与判读表：`tools/README_gpu_module_identity.md`。
+
+采集内容（每个模块独立成段）：实际路径 / realpath / 文件大小 / SHA256 / 权限 / `.modinfo` 的 `name, vermagic, srcversion, version, depends, retpoline, intree` / `VERMAGIC_MATCHES_UNAME_R` / sysfs `version, srcversion, taint, initstate, coresize, inuse, holders` / sysfs Build ID / ELF 头与 Build ID / `__versions`、`__ksymtab`、`.text`、`.modinfo` 节大小。
+
+- 读法：vermagic 应为 `6.6.143-android15-8-gf9aa2fec23c3-4k …`；若如此，§3.4 的推论由 `[E2]` 升为 `[D·C]`。完整判定矩阵（含"若是第三种串"这一支）见 `08` §3.6.4。
+- **子项拆分**：U4-24a = 身份（本脚本可闭合）；U4-24b = 数值（设备构建的 `__ksymtab` CRC / kCFI 期望常量，需反汇编或 `.ko` 副本，**本阶段不做**）。见 `08` §3.6.5。
 
 ### 10.4 明确不要求的采集
 
@@ -571,11 +582,12 @@ adb shell "sha256sum /vendor/lib64/modules/mali_kbase_mt6991_r49.ko /vendor/lib6
 | `strace` / `dmesg` / `logcat` | 需 root 或重启，超出"最小只读"；待 P0 闭合后再议（U4-14/U4-16/U4-02） |
 | 重跑整份 `collect_device.sh` | 三份文件已覆盖其绝大部分输出 |
 
-> **状态（2026-11-15 23:20 更新）**：两条缺口均已按上述命令取得读数。
+> **状态（2026-11-15 23:50 更新）**：
 >
 > | ID | 旧状态 | 新状态 |
 > | --- | --- | --- |
 > | **U4-01** | UNKNOWN（有 E2 级推理） | **✅ 已闭合 [D·A]**：header `0.3` |
 > | **U4-04** | UNKNOWN（有 E1 级推理） | **⚠️ 部分闭合**：版本代次 `r49p1-03bet0` [D·A]；padding / props 行为仍 [U] |
+> | **U4-24** | UNKNOWN（无采集手段） | **⚠️ 工具已就绪，仍未闭合**：`tools/collect_gpu_module_identity.sh` + 指南已提交，**未在真机运行**；子项 b（CRC / kCFI 数值）本阶段不做 |
 >
-> §10.3（U4-24 模块构建代次）**未在本次采集中执行**，保持原状。
+> §10.3 的采集工具已交付，但**在用户回传输出之前，U4-24 一律记 UNKNOWN**。
