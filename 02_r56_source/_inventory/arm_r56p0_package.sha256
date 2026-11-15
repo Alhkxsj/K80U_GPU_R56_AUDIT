@@ -1,0 +1,14 @@
+# Arm R56p0 原始交付包完整性记录
+# 包名: AX504X08X-SW-99002-r56p0-18eac0.tar.gz
+# 采集日期: 2026-11-15
+# 采集方式: 用户从 developer.arm.com 登录后下载，经 WorkBuddy 上传
+
+SIZE_BYTES        1147252
+MD5               62b168823691eb61ec29654cbf35e719
+SHA256            1f7ad4d058bb993a95714d7823f279df9097ae45efe622970a53373217fa92f4
+SHA256(TREE)      a3158608ef6c55ef932b305384a927411d4887bb0339b39b68a14af11b13f292
+
+# 上游清单登记值（02_r56_source/_arm_listing/ 内 JSON）
+LISTING_MD5       62b168823691eb61ec29654cbf35e719
+LISTING_SIZE      1147252
+VERDICT           MATCH — 与 Arm 官方清单逐字节一致
