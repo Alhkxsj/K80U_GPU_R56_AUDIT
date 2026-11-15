@@ -629,7 +629,7 @@ static int kbasep_ioctl_set_limited_core_count(
 
 意义有两点：
 
-1. **交付形态从 out-of-tree 转向 in-tree**。r56p0 把 UAPI 头提升到内核树顶层 `include/uapi/gpu/arm/midgard/`（见 §0），并补齐 ABI 文档与 DT binding。这不是代码行为差异，但说明 R56p0 面向 Android 16 / GKI 6.6+ 的 in-tree 集成方式——移植时目录布局不能照搬 r49p1。
+1. **交付形态从 out-of-tree 转向 in-tree**。r56p0 把 UAPI 头提升到内核树顶层 `include/uapi/gpu/arm/midgard/`（见 §0），并补齐 ABI 文档与 DT binding。这不是代码行为差异，但说明 R56p0 面向**其发布时的** Android 16 时代 / GKI 6.6+ 的 in-tree 集成方式——移植时目录布局不能照搬 r49p1。（2026-11-15 加"其发布时的"限定：本机设备实际为 Android 17，此处描述的是 R56p0 的交付代次，不是本机系统版本。）
 2. **DT binding 从"MTK 自由发挥"变成"官方有约束"**。`compatible` 必须以 `arm,malit6xx` / `arm,mali-midgard` / `arm,mali-bifrost` 之一结尾（`arm,mali-midgard.yaml:44-46`），必需属性为 `compatible` / `reg` / `interrupts` / `interrupt-names`（`:190`）。K80U 现有 mali 节点的 `compatible` 是否满足此约束，属 DTS 范畴，交 `04_mtk_platform/` 核对。
 
 > **证据折价（重要）**：`Documentation/devicetree/bindings/` 下 5 个 yaml 含 10 处非源码文本残留（形如 `:contentReference[oaicite:N]{index=N}`），说明这几个文件是**按网页文本重建**，而非取自官方归档。因此本条只把"文件存在"作为实证，**不把 yaml 正文当依据**。同项检查在 `drivers/`、`include/` 全树为零残留。详见 `MANIFEST.md` §5。

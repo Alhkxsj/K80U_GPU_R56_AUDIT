@@ -11,7 +11,7 @@
 | Arm GPU 交付物文档 | Mali GPU DDK R56p0 Release Notes、kbase 集成指南（Integrator's Guide）、CSF 架构说明 |
 | Arm 接口规范 | kbase 内核↔用户态 ioctl ABI、CSF firmware 接口、GPU 电源/时钟控制模型 |
 | 平台方文档 | MediaTek MT6991 BSP 中 GPU（mfg / mali / gpu）章节、平台电源域与 OPP 说明 |
-| Android 侧要求 | Android 16 对 vendor 模块、内核模块、VINTF 的相关约束 |
+| Android 侧要求 | Android 17（SDK 37）对 vendor 模块、内核模块、VINTF 的相关约束 |
 | 内核侧要求 | Linux 6.6 / GKI KMI、模块签名与 vermagic 规则 |
 | 已知问题 | 与 Mali CSF / MTK GPU 相关的 errata、CVE、上游修复记录 |
 

@@ -6,6 +6,28 @@
 
 ---
 
+## 0. 新会话从这里开始
+
+> 本项目跨多轮 Agent 会话推进，**对话记忆不是可靠来源**。任何 Agent（或新读者）投入工作前，按下表顺序读取，即可恢复全部必要上下文。
+
+| 顺序 | 文件 | 作用 | 何时必读 |
+| ---: | --- | --- | --- |
+| 1 | [`AGENTS.md`](AGENTS.md) | **强制执行规范**：上下文恢复、Git 检查、证据等级、九类禁止表述、仓库红线、交付格式 | **每次任务开始** |
+| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项 UNKNOWN、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
+| 3 | [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) | **已形成的决策**：D-001 … D-015，含状态与再审议条件 | 涉及判断"能不能做/能不能改"时 |
+| 4 | 本文件 §1–§7 | 审计标的、阶段路线图、关键问题闭环情况 | 需要全景时 |
+| 5 | 目标目录的 `README.md` + `MANIFEST.md` | 该目录职责、文件清单、证据登记、修订记录 | 进入某目录前 |
+
+**三条最容易犯的错**（已发生过的实例）：
+
+1. 把**源码推断**写成**设备实测**（首轮"固件 header 实测 0.3"）；
+2. 把**第三方 GKI 运行时**写成**原厂环境实测**（设备运行 KernelSU 补丁内核）；
+3. 把**契约层兼容**写成**运行兼容**（原厂用户态目前只到 UAPI 契约层）。
+
+> 以上三条对应的证据拆分与禁止清单，见 [`AGENTS.md`](AGENTS.md) §0.6；对应的实际案例，见 [`05_userspace_firmware/08_kernel_provenance_audit.md`](05_userspace_firmware/08_kernel_provenance_audit.md)。
+
+---
+
 ## 1. 审计标的
 
 | 项目 | 取值 | 来源 |
@@ -27,7 +49,7 @@
 
 ---
 
-## 2. 当前状态（截至 2026-11-15 21:00）
+## 2. 当前状态（截至 2026-11-15 22:50）
 
 | 阶段 | 内容 | 状态 | 产物 / 证据 |
 | --- | --- | --- | --- |
@@ -115,8 +137,9 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | `05_userspace_firmware/` | 用户态组件与固件：GLES/Vulkan blobs、gralloc、composer、CSF bin、加载路径 | 清单与 ABI 分析 |
 | `06_porting_design/` | 移植方案设计、兼容矩阵、风险登记册、回滚方案、验证计划 | 设计产物 |
 | `final_report/` | 最终审计报告与结论、证据索引 | 交付物 |
+| `docs/` | **长期上下文管理**：`PROJECT_STATE.md`（项目状态）、`DECISION_LOG.md`（决策日志）；与根 `AGENTS.md`（执行规范）共同构成 Agent 恢复入口 | 治理产物 |
 
-**边界原则**：原始证据（`01`、`02`）与分析结论（`03`–`06`）物理隔离，任何结论必须能回溯到 `01`/`02`/`00` 中的具体文件或版本号。
+**边界原则**：原始证据（`01`、`02`）与分析结论（`03`–`06`）物理隔离，任何结论必须能回溯到 `01`/`02`/`00` 中的具体文件或版本号。治理层（`AGENTS.md`、`docs/`）不承载技术结论，只承载**流程**与**状态**；技术结论永远在 `03`–`06`。
 
 ---
 
@@ -186,3 +209,4 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-15 | Stage 4 | `05_userspace_firmware/` 6 份报告 + 只读采集脚本。**核心结论：固件 header 0.3≠0.4 硬不兼容（组合 B 否决）；原厂用户态契约层可保留（组合 C 候选）**；最小替换范围收敛为 Kbase + 固件两件套。blob 未采集，21 项 UNKNOWN（4 项 P0） |
 | 2026-11-15 | **Stage 4 补充** | **真机证据整合与独立复核**（`04-fix`）：解析三份设备采集（inventory / file_metadata / elf_analysis），新增 `05_userspace_firmware/07_device_evidence.md`。①**固件 header 由"实测 0.3"降级为"E2 推理 + U4-01 UNKNOWN"**——三份采集在原理上取不到 offset 4/5；②Vulkan 存在性由 UNKNOWN 升级为**已闭合**（`vulkan.mali.so` 薄壳 + `ro.hardware.vulkan=mali` + VINTF 1.3）；③**撤回"gralloc/mapper/HWC 免疫"**——HWC/mapper 虽不链接 DDK，但 NEEDED `libged`（事件面）；因 `ged.ko` 不反向依赖 kbase，失效性质为**降级**而非崩溃；④`min()` 语义由"校验"更正为"**夹取**"；⑤README 基线更正为 **Android 17 / SDK 37 / kernel 6.6.143-android15**；⑥新增 U4-22/U4-23；⑦确认 `met_*` 三个模块本机不装载。UNKNOWN 由 21 项调整为 23 项（闭合 4 项 + 部分闭合 3 项） |
 | 2026-11-15 | **Stage 4 来源审计** | **第三方 GKI 环境下的证据来源审计**（`stage4: audit … provenance`）：①确认设备运行**第三方 GKI 内核**（KernelSU 补丁，源码提交 `f9aa2fec`，基于 GKI `android15-6.6`），非原厂 boot；②建立 **A/B/C 三类**证据归属（厂商分区文件 / 第三方内核运行时 / 厂商内核模块）并重标 07/01/06；③核验安装范围：`block=boot` + `do.modules=0` + `do.systemless=0`，**只写 boot**，产物无 `.ko`/固件/`.so`；④判定设备 `.ko` 与仓库基线 `.ko` **不是同一构建**（vermagic 118 vs 143、`ged` 1,093,352 B vs 684,032 B），Stage 3 的 kCFI/CRC 常量须以设备构建重导；⑤定性第三方补丁影响（调度/调频/温控为间接，**不可能**改 GPU 驱动源码）；⑥新增 `08_kernel_provenance_audit.md` 与 U4-24…U4-27，UNKNOWN 23→27 项 |
+| 2026-11-15 | **治理（本项目基础设施）** | **建立长期上下文管理**（`docs: establish persistent agent context protocol`）：新增根 [`AGENTS.md`](AGENTS.md)（全局执行协议：上下文恢复 / Git 检查 / 历史核对 / 证据等级 / 九类禁止表述 / 红线 / 自检清单）、[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)（阶段状态、Stage 4 的 27/4/3/4 计数与 P0 明细、设备事实、技术债、任务队列、Stage 5 准入）、[`docs/DECISION_LOG.md`](docs/DECISION_LOG.md)（D-001…D-015）；本文件新增 §0 恢复入口与 `docs/` 目录职责。**目的：让项目状态不再依赖某一次 Agent 对话的记忆。** 同轮修正 5 处 `Android 16` 过时表述（`00_reference/README.md`、`final_report/README.md`、`06_porting_design/README.md` 直接更正为 17；`SOURCE_ACQUISITION.md`、`03_kbase_csf/06_blocking_issues.md` 保留原文并加更正注），另 `03_kbase_csf/01_uapi_abi_diff.md` 一处补"其发布时的"限定；`00_reference/third_party/` 外部文档原文不改（D-014） |
