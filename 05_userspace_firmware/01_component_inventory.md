@@ -2,11 +2,12 @@
 
 > **本文件的诚实前提（已更新）**：仓库内仍然**没有任何用户态二进制、没有 CSF 固件实体**；但 **2026-11-15 已获得设备侧元数据**（路径 / 大小 / SHA256 / ELF 头 / 动态段 / 服务状态），登记于 [`07_device_evidence.md`](07_device_evidence.md)。
 >
-> 因此本文件改为**双轨清点**：
+> 因此本文件改为**三轨清点**：
 > - **仓库轨**：界定"哪些结论只能到源码契约层"；
-> - **真机轨**：登记"哪些对象确实存在、叫什么、多大、依赖谁"。
+> - **真机轨**：登记"哪些对象确实存在、叫什么、多大、依赖谁"；
+> - **来源轨**：每个真机对象标注 A（厂商分区文件）/ B（第三方 GKI 运行时）/ C（厂商内核模块），见 [`08_kernel_provenance_audit.md`](08_kernel_provenance_audit.md)。
 >
-> 证据等级：**[D]** 真机实测 · **[E1]** 源码/二进制直接证据 · **[E2]** 交叉推导 · **[E3]** 命名/惯例推断 · **[U]** UNKNOWN
+> 证据等级：**[D]** 真机实测（细分 `[D·A]`/`[D·B]`/`[D·C]`） · **[B]** 构建记录 · **[P]** 用户声明 · **[E1]** 源码/二进制直接证据 · **[E2]** 交叉推导 · **[E3]** 命名/惯例推断 · **[U]** UNKNOWN
 
 ---
 
@@ -20,7 +21,7 @@ TASK 04 的三大对象（CSF 固件、用户态 DDK、Android 图形栈）在**
 | GLES 驱动 `libGLES_mali.so` | ❌ | ✅ 53,105,232 B | 有元数据与依赖，**无版本串** |
 | Vulkan 实现 | ❌ | ✅ 133,416 B 薄壳 + VINTF 1.3 | 存在性已确认 |
 | mapper / HWC / gralloc | ❌ | ✅ 三件齐备 | 存在性已确认 |
-| 平台层 `.ko` | ✅ 15 个 | ✅ 12 个已装载 | 可交叉印证 |
+| 平台层 `.ko` | ✅ 15 个（**6.6.118 构建**） | ✅ 12 个已装载（**设备侧 6.6.143 构建**） | **同源码标签、异构建**，不可视为同一二进制 |
 
 > 这个区分贯穿全部七份报告：**"契约是否兼容"可由源码精确回答，"blob 是否遵守契约"必须看实体，而"实体的大小/哈希"又不等于"实体的内部字段"。** 三层不能混用。
 
@@ -71,6 +72,19 @@ find . -type d -name "firmware"               → 0 个
 | `mali_prot_alloc_mt6991_r49.ko` | 21,080 | PMA，保护内存分配者（DRM/SVP 路径） |
 
 SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
+
+> **来源与代次（2026-11-15 补记）**：这 15 个 `.ko` 取自社区设备树镜像 `xiaomi-mt6991-devs/android_device_xiaomi_dali-kernel@0576426`，统一 vermagic 为
+> `6.6.118-android15-8-g57e634f35c1b-4k SMP preempt mod_unload modversions aarch64`。
+>
+> 而设备当前运行内核为 `6.6.143-android15-8-gf9aa2fec23c3-4k`。`modversions` 开启时两者**必须逐字符相等**才能装载，因此：
+>
+> | 结论 | 等级 |
+> | --- | --- |
+> | 仓库 15 个 `.ko` **不能**装载到设备当前内核 | **[E1]**+**[E2]** |
+> | 设备上装载的 `.ko` 是**另一次构建**（`ged` 1,093,352 B vs 684,032 B 亦可佐证） | **[E2]** |
+> | 两者只共享**源码标签** `r49p1-03bet0` 与 **UK ABI 1.30** | **[D·C]** |
+>
+> 影响：本章与 `03_gles_egl_abi.md` 中依赖**源码**的结论不受影响；依赖**二进制常量**的结论（kCFI 类型哈希、`__versions` CRC）须以设备构建重导。详见 [`08_kernel_provenance_audit.md`](08_kernel_provenance_audit.md) §3。
 
 **真机装载情况（[D]，本轮新增）**：15 个中 **12 个已装载**；`met_gpu_api`、`met_gpu_adv_api`、`met_gpueb_api` **未装载**。
 
@@ -207,6 +221,8 @@ SHA256 全表见 `04_mtk_platform/MANIFEST.md` §2（已核验）。
 | U4-08 | HWC 是否直接依赖 GPU | — | ✅ **已闭合：不直接依赖**（NEEDED 无 Mali 库）；新开 U4-22（经 `libged` 的间接耦合） |
 | U4-09 | VINTF 声明与 init 服务 | — | ✅ **已闭合**：10 个 manifest、16 个 rc（含 `hw/init.mtkgki.rc`）、服务 pid 全部实测 |
 | **U4-22**（新增） | **`libged` 失效时 mapper/HWC 的实际行为** | 需故障注入 | 新风险面，见 `05` §3.2 |
+| **U4-24**（新增） | 设备侧 `.ko` 的 SHA256 / vermagic | `strings` 取 `vermagic` + `sha256sum`（只回传文本） | 见 `08` §6.3、`07` §10.3 |
+| **U4-27**（新增） | `/vendor` 当前视图是否被 KSU/NoMount overlay 覆盖 | `mount \| grep -i overlay` | 见 `08` §6.3 |
 
 > U4-03 的双重确认：TASK 03 的 dtbo 解析（`04_mtk_platform/05_dts_hardware_resource_audit.md` §2）与本轮 `/sys/firmware/devicetree/base/soc/mali@48000000` 属性枚举，**两侧都不含** `firmware-name`，因此走默认名。此项为 **已闭合**。
 >
