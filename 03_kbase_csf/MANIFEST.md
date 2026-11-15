@@ -109,7 +109,7 @@ grep -rl 'oaicite\|contentReference' 02_r56_source/ | wc -l
 
 | 编号 | 内容 | 消除成本 |
 | --- | --- | --- |
-| U8 | `gpu_props_user_data` 568/592 字节为人工推算，**未经编译验证** | 独立编译单元 `sizeof` 对拍（本审计禁止编译） |
+| U8 | ~~`gpu_props_user_data` 568/592 字节为人工推算~~ → **2026-11-16 更正：内核实际校验的是 `prop_buffer_size`（TLV 序列化长度），已独立复算为 749 / 781 B，本项可关闭**（`D-032`）；`sizeof(struct)` 本身仍未经编译验证，但**不影响任何结论** | 已由脚本复算闭合；如需 `sizeof` 对拍仍须独立编译单元（本审计禁止编译） |
 | U6 / U7 | K80U 用户态是否调用 80 号 ioctl；`mali_csffw.bin` 的固件 ABI | 需从真机提取 `libGLES_mali.so` 与固件 |
 | U5 | G925 是否真具备 `ray_traversal` / `neural_accelerator` / PBHA | 需读 `GPU_FEATURES` 寄存器 |
 

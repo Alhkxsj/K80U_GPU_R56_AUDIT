@@ -380,6 +380,13 @@ struct base_gpu_queue_error_fatal_payload {
 
 ## KB-007 — `gpu_props_user_data` 568 → 592 字节（GET_GPUPROPS 返回体扩容）
 
+> ⚠️ **本节的两个数字是 `sizeof(struct)` 的人工推算，不是内核实际校验的量（2026-11-16 更正，`D-032`）**。
+>
+> `GET_GPUPROPS` 的校验对象是 `kbdev->gpu_props.prop_buffer_size` —— 即 **TLV 序列化流的总长度**，由 `Σ(4 + sizeof(value))` 逐属性累加得出，与结构体 padding 无关。
+> 独立复算：**R49 = 749 B / R56 = 781 B（+32）**，属性 **83 项共同 + 3 项新增**（`RAW_BASE_PRESENT`=86 / `RAW_NEURAL_PRESENT`=87 / `NUM_ACTIVE_GRANULARITY`=88，无删除）。
+> 判定规则本身不变（`size == 0` 探测返回所需长度；`size < prop_buffer_size` 才 `-EINVAL`），故**下文"越界 24 字节"的推演不成立**——拷贝长度是 `prop_buffer_size`，不是 `sizeof(struct)`。**本节保留原文以留痕**（`AGENTS.md` §0.7）。
+> 现行结论见 `06_porting_design/STAGE4_REMAINING_AUDIT.md` §2 N-2。
+
 | 字段 | 内容 |
 | --- | --- |
 | **ID** | KB-007 |

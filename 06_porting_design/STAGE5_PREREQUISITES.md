@@ -76,7 +76,7 @@
 
 | # | 需要确认 | 命令（只读） | 解掉哪项 | 优先级 |
 | ---: | --- | --- | --- | :---: |
-| 1 | R49 DDK 是否对 ioctl 结构体清零 padding | `strace -f -e trace=ioctl -o /data/local/tmp/gpu.log` + 触发一次 `eglInitialize` | U4-04c、R-A1（**组合 C 生死项**） | **P0** |
+| 1 | R49 DDK 是否对 ioctl 结构体清零 padding | **须 R49 DDK 源码或反汇编**（`strace` 仅能确认调用与 `_IOC` 请求号，**读不到 padding 字节**；见 `STAGE4_DEVICE_COLLECTION_PLAN.md` §6） | U4-04c、R-A1（**组合 C 生死项**） | **P0** |
 | 2 | 设备 `ged.ko` 的 `__versions` 内容 | `readelf -x __versions /vendor_dlkm/lib/modules/ged.ko` | U4-24b | P1 |
 | 3 | 内核 `build-id` | `cat /sys/kernel/notes`（或等价只读手段） | U4-26 | P2 |
 | 4 | `/vendor` 是否被 overlay | `cat /proc/self/mountinfo \| grep -Ei "vendor\|overlay"` | U4-27 | P2 |
@@ -99,7 +99,7 @@
 | 5 | "padding 只有两处强制校验" | 48 个钩子中 **15 个强制** | 覆盖 CS 主链路（`D-025`） |
 | 6 | "DDK 宣称 UK 1.30" | DDK 只自报 release 串，1.30 是**映射结果** | "由 `r49p1-03bet0` 映射为 1.30" |
 | 7 | "`lsmod` 的 size 是文件大小" | 是 `core_layout.size`（内存、页对齐） | 文件大小见 `05/07` §3.5 |
-| 8 | "R46 与 R56 版本接近所以兼容" | 跨代组合从未被验证；`_1_35` 的存在证明"接近"要专写迁移 | 见 `DDK_DUAL_TRACK_ASSESSMENT.md` §5.4 |
+| 8 | "R46 与 R56 版本接近所以兼容" | 跨代组合从未被验证；`_1_35` 的存在证明"接近"要专写迁移。**R46 已退出备选路线**（`D-030`），此条降为一般性禁止表述 | 见 `DDK_DUAL_TRACK_ASSESSMENT.md` §4 |
 | 9 | "header 0.4 就代表固件适配 G925 MC12" | header 是**格式版本**，与 SKU 无关 | SKU 需单独核 core mask / 型号字段 |
 
 ---
@@ -130,7 +130,7 @@
 
 **进 Stage 5A 前**
 
-- [x] Stage 4 全量状态表已定稿（27 项，5/6/1/15）
+- [x] Stage 4 全量状态表已定稿（27 项，**5/8/1/13**；2026-11-16 逐项重核后更新，`D-033`）
 - [x] DDK 路线已评估（DDK-A 首选，DDK-B 不可推荐）
 - [x] 阻断项已列明并分级（P-1 ~ P-4）
 - [x] 未验证假设清单已建立（9 条）

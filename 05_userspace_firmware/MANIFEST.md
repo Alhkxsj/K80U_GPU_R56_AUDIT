@@ -69,6 +69,7 @@
 | 12 | **`tools/README_stage4_p0.md`** | 234 | 8,547 | `001e85e8e235ad1b` | 手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令）+ **本机执行结果摘要** |
 | 13 | **`tools/collect_gpu_module_identity.sh`** | 399 | 17,967 | `356175c51c874af3` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、路径多根搜索、压缩/内建降级判定）。**v1.1 修正 `ged$` 正则失效**（`08` §3.7.7） |
 | 14 | **`tools/README_gpu_module_identity.md`** | 199 | 9,217 | `2238d43031af3108` | **新增**：手机执行指南 + 三行核心判读表 + `lsmod` 尺寸口径说明 + 兜底命令 + 失败排查 |
+| 15 | **`tools/collect_stage4_remainder.sh`** | 464 | 见文件 | `git hash-object` | **新增（本轮）**：Stage 4 剩余项合并采集（11 段 A–K，只读、无 adb、无电脑依赖）。输出统一到 `/sdcard/GPU_AUDIT_STAGE4/`（失败回退 `/data/local/tmp/`）；**逐工具 `NOT_AVAILABLE` 容错**、`MODDIR` 三级回退、dmesg 计数 `case` 数字校验。`sh -n` 通过 + 本地冒烟 exit=0。**仅为准备，未在真机执行**；执行说明见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` |
 | 15 | `MANIFEST.md` | 本文件 | — | — | — |
 
 > 行数 / 字节 / SHA256 由 §4.10 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
@@ -151,7 +152,7 @@
 | `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵；**§3.7.4 已于 v1.7 改写** |
 | **`09`** | ✅ | — | **新增**：Stage 4 收尾核验（四处更正 + 阻断清单 + 最终裁定 B） |
 
-> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 5 / PARTIAL 6 / BLOCKED 1 / OPEN 15**（五态，见 §6.1），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
+> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13**（五态，见 §6.1；**2026-11-16 由 5/6/1/15 更新，`D-033`**），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
 ### 3.3 来源归属状态（A / B / C）
 
@@ -369,7 +370,9 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项：CLOSED 5 / PARTIAL 6 / BLOCKED 1 / OPEN 15）
+### 6.1 UNKNOWN 汇总（27 项：CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13）
+
+> 本节为 `05` 视角的摘要；**现行权威台账**为 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)。
 
 | 优先级 | ID | 内容 | 状态 |
 | --- | --- | --- | --- |
@@ -462,3 +465,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-16 | **v1.6** | **U4-24 实测整合，a 闭合 / b 开放**（`stage4: close U4-24a with device module identity`）：用户执行 `collect_gpu_module_identity.sh` 并回传 `stage4_mod_20261116_000412.txt`。①**18 个 `.ko` 身份全取**（路径/大小/SHA256/vermagic/srcversion/sysfs Build ID），vermagic 全部为 **`6.6.118-android15-8-g54a15cf3acba-4k`**；②**发现三层内核版本**：运行 `6.6.143-gf9aa2fec23c3`（第三方）／原厂推定 `6.6.118-g54a15cf3acba`／仓库基线 `6.6.118-g57e634f35c1b`（OS3.0.305.0）——**此前把 6.6.143 当"设备内核"是错的**；③**14/15 模块字节数与 `.text`/`__versions` 节大小完全相同**，`mali_mgm`/`mali_prot_alloc` 的 `srcversion` 逐字符相同，**仅 kbase 实质不同**（+17,640 B）→ **REA 重导范围收窄至 kbase**；④~~**发现运行内核绕过 vermagic 校验**~~（**已于 v1.7 撤回**：那是 `CONFIG_MODVERSIONS` 的原生语义）；⑤"`ged` 差 409 KB"**彻底作废**（两侧文件同为 1,093,352 B）；⑥设备 GPU 相关文件 **18 个**（仓库 15 个，缺 `mtk_ghpm`/`mtk_cg_peak_power_throttling`/`mtk_smmu_qos`）；⑦修脚本 v1.1 正则缺陷。**计数 27/5/3/3 → 27/5/4/3**（U4-24 转入部分闭合，P0 不变） |
 | 2026-11-16 | **v1.7** | **Stage 4 收尾核验**（`stage4: close remaining audit items with source-level verification`）：新增 **`09_stage4_closure.md`**（Stage 4 最终裁定 + 四处更正 + 阻断清单）。①**撤回"运行内核绕过 `same_magic()`"**——`CONFIG_MODVERSIONS` 下该函数本就跳过 release 串（v6.6 `version.c:88-96`），装载合法；②**找出真正的开关**：`bypass-kernel` 把 `version.c` 的 `bad_version:` 改 `return 1`，默认关闭，2026-08-29→10-30 门控 `== 'true'`（布尔对字符串）恒失效；U4-25 拆 a/b/c；③**`uname -v` 的日期是补丁月常量**（`${os_patch_level}-05 04:20:00 UTC`），不能作构建时间；④**padding 强制校验实为 15 处**（原写"两处"，只读了 `mali_kbase_ioctl_helpers.h` 前 20 个定义），R-C2 由"tiler 失效"上调为"GPU 不可用"；⑤核 R56 交付包 23 条目 **0 个固件**（U4-12 属商业阻断）；⑥`/proc/modules` taint 仅 `(O)`、无 `F`。**计数 27/5/4/3 → 27/5/5/3**；D-021 改写，新增 D-023/D-024/D-025 |
 | 2026-11-16 | **v1.8** | **Stage 4 全量收尾（TASK-STAGE4-FINAL）**：`09` 追加 **§11**（三条新证据 + 一条自我更正）。①**UAPI 结构体双向全量比对**：51 个共同结构体、实质差异 **0**（`mem_sync` 仅重命名 `handle`→`gpu_va`；CSG 112→120 的扩展被 `_1_35` 变体逐字段迁移吸收）→ **U4-04b 闭合**；②**R56 实际删除 6 个 ioctl**，含 MTK 私有 **80**（`INTERNAL_FENCE_WAIT`，仅超时上报与可选自愈 reset）与 **55**（`SET_LIMITED_CORE_COUNT`）→ U4-14 精确化；③**CSF 固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED**。**计数 27/5/5/3 → 27/5/6/1/15**（五态：CLOSED/PARTIAL/BLOCKED/OPEN/UNKNOWN） |
+| 2026-11-16 | **v1.9** | **Stage 4 剩余取证与 DDK 路线纠偏（TASK-STAGE4-REMAINDER）**：新增 `tools/collect_stage4_remainder.sh`（464 行，11 段合并只读采集，`NOT_AVAILABLE` 容错，**未执行**）。本目录四处口径更正：①**U4-04c 未知面由 15 项收窄到 4 项**——R49 kbase **内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111），是 R56 所查 `padding[62]` 的**真子集**（`D-031`）；②**props 实为 83 项共同 + 3 项新增**、序列化缓冲 **749 → 781 B**；「568/592」仅 `sizeof` 人工推算（`D-032`）；③**ioctl 54 → 50**（删 6 增 2），**ioctl 55 在 CSF 上本为 no-op**（唯一消费者是 JM 后端）；④**R49 已完整支持 `tKRx`**，`features` 与 R56 逐项相同。**计数 27/5/6/1/15 → 27/5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；P0 仍 3 |

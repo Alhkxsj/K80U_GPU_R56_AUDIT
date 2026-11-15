@@ -165,7 +165,7 @@ git rev-parse HEAD
 | 10 | 把**运行内核版本**写成**设备/原厂内核版本** | 把第三方 `6.6.143-gf9aa2fec23c3` 记作"设备内核"；原厂应为 `6.6.118-g54a15cf3acba`（由厂商 `.ko` vermagic 反推） |
 | 11 | 把**内核接受不匹配模块**写成**该模块 ABI 兼容** | 15 个模块 vermagic 与运行内核不符仍全部装载。**注意（2026-11-16 更正）**：这不代表内核被打了补丁——`CONFIG_MODVERSIONS` 下 `same_magic()` **原生忽略 release 串**（v6.6 `kernel/module/version.c:88-96`）。装载成功只证明"被 import 的符号 CRC 一致"，**不能**推出"与 R56 兼容"；且若该内核曾以 `allow_version_mismatch=true` 构建，连前者也不成立 |
 | 12 | 把**"同一源码标签/同一 sublevel"**写成**"同一构建"** | `r49p1-03bet0` 在两侧相同，但分属 OS3.0.305.0 与 OS4.0.3.0 两次构建 |
-| 13 | 把**"版本号接近"**写成**"ABI 兼容"** | R46 与 R56 同属 major 1，握手 `min()` 一定通过——但**握手成功零信息量**（`mali_kbase_core_linux.c:357-378`）；跨代组合的真正风险在 CSG 结构体 size 落点与硬件 workaround 表（`06/DDK_DUAL_TRACK_ASSESSMENT.md`） |
+| 13 | 把**"版本号接近"**写成**"ABI 兼容"** | **R49 与 R56 同属 major 1**，握手 `min()` 一定通过——但**握手成功零信息量**（`mali_kbase_core_linux.c:357-378`）。跨代组合的真正风险在 CSG 结构体 size 落点与硬件 workaround 表（`06/DDK_DUAL_TRACK_ASSESSMENT.md`）。**推论**：R49-derived 路线必须靠**逐项改造 + 逐项验证**成立，不能靠"版本接近"。历史上的 R46 例证仍成立，但 **R46 已退出备选路线**（`D-030`） |
 | 14 | 把**固件 header 版本**写成**硬件 SKU 匹配** | header `0.4` 只是**格式版本**，与 GPU 型号无关；`G925 支持 ≠ MT6991 平台支持`，同一 SKU 还有 MC9/MC10/MC12 之分（`05/09` §6.2） |
 | 15 | 把**"DDK 能装载/能握手"**写成**"DDK 能渲染"** | 5th Gen CSF 的渲染路径要过 `CS_QUEUE_REGISTER` / `CSG_CREATE` / tiler heap 三条 padding 强制校验（15 处），任何一处 `-EINVAL` 都是"GPU 完全不可用"（`05/09` §5.2） |
 

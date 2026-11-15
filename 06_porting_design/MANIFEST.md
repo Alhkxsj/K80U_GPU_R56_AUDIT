@@ -6,9 +6,12 @@
 
 | 文件 | 类别 | 来源 | 版本 / 标识 | 采集日期 | 采集方式 | SHA256 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `STAGE4_FINAL_REPORT.md` | Stage 4 收尾台账 | 本项目 `05/01`–`09` + `04/*` 汇总 | v1.0 | 2026-11-16 | 纯文档撰写（零新增采集） | 见 `git hash-object` |
-| `DDK_DUAL_TRACK_ASSESSMENT.md` | DDK 路线评估 | `02_r56_source` 源码 + 公开资料 | v1.0 | 2026-11-16 | 源码静态分析 | 同上 |
-| `STAGE5_PREREQUISITES.md` | 准入清单 | 上述两份 + `docs/DECISION_LOG.md` | v1.0 | 2026-11-16 | 纯文档撰写 | 同上 |
+| `STAGE4_FINAL_REPORT.md` | Stage 4 收尾台账（**时点快照**） | 本项目 `05/01`–`09` + `04/*` 汇总 | v1.0（文首已加时点警告块） | 2026-11-16 | 纯文档撰写（零新增采集） | 见 `git hash-object` |
+| `DDK_DUAL_TRACK_ASSESSMENT.md` | DDK 路线评估 | `02_r56_source` 源码 + `01_original_baseline` r49p1 源码 + `05/07` 设备证据 + `_rea_analysis` | **v2.0**（DDK-B 由 R46 改为 R49-derived，`D-030`） | 2026-11-16 | 源码静态分析 + `strings` 抽样 | 同上 |
+| `STAGE4_REMAINING_AUDIT.md` | **现行** Stage 4 台账 | `01_original_baseline`（r49p1）+ `02_r56_source`（R56p0）+ `05/*` + `06/STAGE4_FINAL_REPORT.md` | v1.0 | 2026-11-16 | 逐项重核（源码 grep + 脚本对拍） | 同上 |
+| `R49_DDK_ADAPTATION_PLAN.md` | R49 深度改造预研框架（17 节） | 同上两份源码树 + `05/07` 设备证据 | v1.0（**纯设计，零源码改动**） | 2026-11-16 | 源码静态分析 + 设计推演 | 同上 |
+| `STAGE4_DEVICE_COLLECTION_PLAN.md` | 真机最小只读采集方案 | 上述台账的未闭合项 + `05/tools/*.sh` 既有采集范围 | v1.0（**方案，未执行**） | 2026-11-16 | 方案撰写 + 脚本本地冒烟测试 | 同上 |
+| `STAGE5_PREREQUISITES.md` | 准入清单 | 上述若干份 + `docs/DECISION_LOG.md` | v1.0 | 2026-11-16 | 纯文档撰写 | 同上 |
 
 ## 登记规则
 
@@ -22,7 +25,7 @@
 | 编号 | 含义 | 出处 |
 | --- | --- | --- |
 | 路线 **A/B/C/D** | **移植策略**：整包替换 / 以 MTK 为底回移 / 仅换固件与用户态 / 不移植 | `README.md` |
-| **DDK-A / DDK-B** | **用户态 DDK 版本**：R56 DDK / R46 DDK | `DDK_DUAL_TRACK_ASSESSMENT.md` |
+| **DDK-A / DDK-B** | **用户态 DDK 版本**：**DDK-A = 完整 R56 DDK** / **DDK-B = R56 Kbase + R49-derived compatibility DDK**（原第 1 版曾写 R46，已由 `D-030` 取代） | `DDK_DUAL_TRACK_ASSESSMENT.md` |
 | **P-1 … P-4** | Stage 5B 的 4 项硬前置 | `STAGE5_PREREQUISITES.md` §1 |
 | **C-1 / C-2** | 可带 BLOCKED 进入 Stage 5A 的 2 项 | `STAGE5_PREREQUISITES.md` §2 |
 | **R-A\* / R-B\*** | P0 / P1 风险 | `STAGE4_FINAL_REPORT.md` §6 |
@@ -34,3 +37,4 @@
 | 日期 | 版本 | 变更 |
 | --- | --- | --- |
 | 2026-11-16 | v1.0 | 首次登记三份 Stage 4 收尾文档；建立编号约定（避免"路线 A/B"二义） |
+| 2026-11-16 | **v1.1** | 补登 **3 份**新文档（`STAGE4_REMAINING_AUDIT.md` / `R49_DDK_ADAPTATION_PLAN.md` / `STAGE4_DEVICE_COLLECTION_PLAN.md`）；`DDK_DUAL_TRACK_ASSESSMENT.md` 升 **v2.0**；编号约定中 **DDK-B 由「R46 DDK」改为「R49-derived compatibility DDK」**（`D-030`），旧定义留痕于本行 |

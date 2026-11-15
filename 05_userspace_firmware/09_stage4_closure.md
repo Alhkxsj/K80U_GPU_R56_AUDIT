@@ -296,7 +296,7 @@ copy_to_user(...)
 
 | ID | 内容 | 为什么现在闭不了 | 最小动作 | 成本 |
 | --- | --- | --- | --- | --- |
-| **U4-04** | DDK 是否清零 padding / 是否做 props 协商 | 需 `libGLES_mali.so` 内部证据；该文件 53 MB，不可上传，仓库内无分析 | ① 只读：`strace -f -e trace=ioctl -o /data/local/tmp/gpu.log` 抓一次 `eglInitialize`，看 `MEM_JIT_INIT`/`CS_QUEUE_*` 的入参字节；② 或反编译看 `memset`/`{0}` 初始化 | 低（①，root）/ 中（②） |
+| **U4-04** | DDK 是否清零 padding / 是否做 props 协商 | 需 `libGLES_mali.so` 内部证据；该文件 53 MB，不可上传，仓库内无分析 | ① 只读：`strace -f -e trace=ioctl` 抓一次 `eglInitialize`，**只能确认这些 ioctl 被调用过、以及请求号里的 `size` 字段**（`strace` 不解码私有结构体，**看不到 padding 字节**）；② **真正能定性的只有反汇编或取得 R49 DDK 源码** | 低（①）/ 高（②） |
 | **U4-24b** | 设备构建的 `__versions` CRC | 需设备侧 `readelf -x` 文本 | `readelf -x __versions /vendor_dlkm/lib/modules/ged.ko` | 极低 |
 | **U4-25b** | 运行内核 `check_version` 是否被打补丁 | 补丁在 CRC 匹配时**无行为差异**，运行态不可观测 | 查构建输入（需仓库权限）或比对内核二进制 | 低—中 |
 | **U4-26** | 设备 boot 是否为 run #11 产物 | `uname -v` 零信息量（§4）；缺内核镜像哈希 | 采 `/sys/kernel/notes` 的 build-id，与产物内 `Image` 比对 | 低 |
@@ -310,7 +310,9 @@ copy_to_user(...)
 
 ### 8.1 27 项状态（本轮后）
 
-> **注（2026-11-16 第二轮）**：下表是**第一轮**的计数（PARTIAL 5），保留作历史。最终台账见 `06_porting_design/STAGE4_FINAL_REPORT.md` §1，本轮增量为：**U4-04b 闭合**、**U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED** → 五态 **5 / 6 / 1 / 15**（§11）。
+> **注（2026-11-16 第二轮）**：下表是**第一轮**的计数（PARTIAL 5），保留作历史。该轮增量为：**U4-04b 闭合**、**U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED** → 五态 **5 / 6 / 1 / 15**（§11）。
+>
+> **注（2026-11-16 第三轮，TASK-STAGE4-REMAINDER）**：计数再变为 **CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13**（`D-033`：U4-14、U4-15 由 OPEN 转 PARTIAL）。**现行权威台账**改为 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)；`06/STAGE4_FINAL_REPORT.md` 保留为时点快照。本轮另更正本文一处**方法学错误**：§7 的 U4-04 行曾把「`strace` 抓 padding 字节」列为可行闭合手段，实际 `strace` 只能解出 `_IOC` 请求号，**看不到结构体内容**（`D-031` 后 U4-04c 的闭合手段改为 R49 DDK 源码或反汇编）。
 
 | 状态 | 数量 | 明细 |
 | --- | ---: | --- |
@@ -338,7 +340,7 @@ copy_to_user(...)
 
 ## 9. 进入 Stage 5A 前必须补的三件事
 
-1. **U4-04 的 padding 子项**（现在是最贵的风险）：一条 `strace` 或一次反编译即可定性。若 DDK 清零 → 风险清零；若不清零 → 组合 C 直接判死，Stage 5A 的方案选择会完全不同。
+1. **U4-04c 的 padding 子项**（现在是最贵的风险）：**只能靠 R49 DDK 源码或反汇编定性**（`strace` 看不到结构体内容，见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` §6）。已知 R49 kbase 自身内联校验 9 处（`D-031`），未知面已收窄到 4 条（`CS_QUEUE_REGISTER` 为致命位）。若 R49 DDK 清零 → 风险清零；若不清零 → 组合 C 直接判死。
 2. **U4-12 的固件资产**：没有 `mali_csffw.bin 0.4`，组合 D 无法评估，Stage 5A 只能做"条件式设计"。
 3. **U4-24b 的单样本 CRC**：一条 `readelf -x`，把"14 个模块可沿用"从推断变实测。
 
@@ -416,6 +418,26 @@ R49 同构（`device/backend/mali_kbase_device_csf.c:463-474` 同一注释）。
 ### 11.4 一条对 `03` 的自我更正
 
 `03` §9.2 第一版写"只有两个真正检查"，`09` §5 已更正为 **15 处强制**。本轮补充其**后果边界**：R49 kbase **根本没有** `mali_kbase_ioctl_helpers.h`（该机制 R50+ 引入），所以 R49 环境下 padding **不被校验**——这既解释了"为什么 R49 DDK 可能不清零"，也说明"R49 上能跑"**不能**反推"清零"。
+
+> ❌ **本段结论已被推翻（2026-11-16，`D-031`）**。前提「R49 kbase 没有 `mali_kbase_ioctl_helpers.h`」**正确**（该文件确实是 R50+ 的集中式 helper），但由此推出「R49 不校验 padding」**错误**。
+>
+> R49 kbase 把校验**内联**写在调用点，**9 处**（路径均已逐行复核）：
+>
+> | # | 文件:行 | 对象 |
+> | ---: | --- | --- |
+> | 1 | `mali_kbase_core_linux.c:1160-1166` | `MEM_JIT_INIT` 的 `padding[]` |
+> | 2 | `mali_kbase_core_linux.c:1518-1521` | `CSG_CREATE_1_6` 的 `in.padding[]` |
+> | 3 | `mali_kbase_core_linux.c:1550-1553` | `CSG_CREATE_1_18` 的 `in.padding[]` |
+> | 4 | `csf/mali_kbase_csf.c:1367-1370` | **现版 `CSG_CREATE` 的 `in.padding[9]`（offset 40–111）** |
+> | 5 | `mali_kbase_core_linux.c:1568-1571` | 现版 `CSG_CREATE` 的 `in.reserved` |
+> | 6 | `mali_kbase_core_linux.c:1714-1716` | `READ_USER_PAGE` 的 `in.padding` |
+> | 7 | `csf/mali_kbase_csf_kcpu.c:3059-3063` | KCPU 命令的 `command.padding[]` |
+> | 8 | `mali_kbase_kinstr_jm.c:756-758` | `KINSTR_JM_FD` 的 `in.padding` |
+> | 9 | `mali_kbase_softjobs.c:894-897` | `base_jit_alloc_info` 的 `info->padding`（`kbasep_jit_alloc_validate`） |
+>
+> **后果**：①「R49 上能跑」**仍然不能**反推「DDK 清零」这个结论**方向不变**，但理由不同——不是因为不校验，而是因为**只有部分结构体被校验**；②更重要的是，现版 CSG 校验的 `padding[9]`（offset 40–111）是 R56 所查 `padding[62]`（offset 50–111）的**超集**，加上「设备确实在渲染」这一 [D·B] 事实，可推出 **R56 这一关必过**（[E1]+[D·B] → [E2]，见 `06/STAGE4_REMAINING_AUDIT.md` §3.1）。
+>
+> **原文保留以留痕**，不删除（`AGENTS.md` §0.7）。
 
 ### 11.5 本轮引用的新增外部/本地证据
 
