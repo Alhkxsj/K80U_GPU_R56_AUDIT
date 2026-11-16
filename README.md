@@ -13,7 +13,7 @@
 | 顺序 | 文件 | 作用 | 何时必读 |
 | ---: | --- | --- | --- |
 | 1 | [`AGENTS.md`](AGENTS.md) | **强制执行规范**：上下文恢复、Git 检查、证据等级、15 类禁止表述、仓库红线、交付格式 | **每次任务开始** |
-| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项五态台账（CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
+| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项五态台账（**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
 | 3 | [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) | **已形成的决策**：D-001 … D-033，含状态与再审议条件 | 涉及判断"能不能做/能不能改"时 |
 | 4 | 本文件 §1–§7 | 审计标的、阶段路线图、关键问题闭环情况 | 需要全景时 |
 | 5 | 目标目录的 `README.md` + `MANIFEST.md` | 该目录职责、文件清单、证据登记、修订记录 | 进入某目录前 |
@@ -58,7 +58,7 @@
 | Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
 | Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0） |
 | Stage 3-REA | 二进制逆向补充审计（REA + Ghidra） | ✅ 完成 | `04_mtk_platform/REA_SUPPLEMENT.md` 等 8 份；12 个 `.ko` / 5,440 函数 |
-| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，全量收尾完成，证据未闭环** | `05_userspace_firmware/` 9 份（`01`–`09`）+ `06_porting_design/` **六份**收尾台账（含 R49 改造预研与真机采集方案）；**27 项：CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13** |
+| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，全量收尾完成，证据未闭环** | `05_userspace_firmware/` 9 份（`01`–`09`）+ `06_porting_design/` **六份**收尾台账 + **两轮真机采集证据**；**27 项：CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
 
 > **Stage 4 的两种状态必须分开读**
@@ -67,7 +67,7 @@
 > | --- | --- | --- |
 > | **报告交付** | ✅ 完成 | 首轮 6 份（`efd8547`）+ 真机证据整合（`04-fix`，第 7 份）+ 来源审计（`stage4: audit … provenance`，第 8 份） |
 > | **来源归属** | ✅ 完成 | A/B/C 三分：厂商文件 / 第三方内核运行时 / 厂商模块（`05/08`） |
-> | **证据闭环** | ⚠️ **未闭环** | 27 项：**CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13**；**P0 仍 3 项**（U4-04 / U4-10 / U4-12）。台账见 [`06/STAGE4_REMAINING_AUDIT.md`](06_porting_design/STAGE4_REMAINING_AUDIT.md)（现行）与 [`06/STAGE4_FINAL_REPORT.md`](06_porting_design/STAGE4_FINAL_REPORT.md)（时点快照） |
+> | **证据闭环** | ⚠️ **未闭环** | 27 项：**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**；**P0 仍 3 项且一项未动**（U4-04 / U4-10 / U4-12）。台账见 [`06/STAGE4_REMAINING_AUDIT.md`](06_porting_design/STAGE4_REMAINING_AUDIT.md)（现行）与 [`06/STAGE4_FINAL_REPORT.md`](06_porting_design/STAGE4_FINAL_REPORT.md)（时点快照） |
 >
 > **已完成（证据支持）**
 > - UAPI 契约逐字段比对：ioctl 逐字相同（R49 **54** → R56 **50**，删 6 增 2）、结构体 30/30 兼容、GPU 属性 **83 项共同 + 3 项新增**（`RAW_BASE_PRESENT` / `RAW_NEURAL_PRESENT` / `NUM_ACTIVE_GRANULARITY`）、能力表为 ≤1.30 保留旧语义
@@ -165,7 +165,7 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
 | Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
 | Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ Stage 3-REA 二进制补充审计） |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 全量收尾完成**（27 项五态：5 / 8 / 1 / 13；P0 3 项，其中 U4-12 为 BLOCKED） |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 全量收尾完成 / 两轮真机采集已并入**（27 项五态：**8 / 12 / 1 / 6**；P0 3 项且一项未动，其中 U4-12 为 BLOCKED） |
 | Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始（前置条件：U4-04c / U4-12 / U4-24；**可设计、不可定论**） |
 
 ---
@@ -222,3 +222,4 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | 2026-11-16 | **Stage 4 全量收尾 + DDK 双路线** | `stage4: finalize stage 4 with full-state ledger and DDK dual-track assessment`：新增 [`06/STAGE4_FINAL_REPORT.md`](06_porting_design/STAGE4_FINAL_REPORT.md)（27 项五态台账 / 风险登记 / 验收结论 **B**）、[`06/DDK_DUAL_TRACK_ASSESSMENT.md`](06_porting_design/DDK_DUAL_TRACK_ASSESSMENT.md)（**DDK-A=R56 唯一推荐、DDK-B=R46 不可推荐**；11 行决策矩阵）〔**注：本行的 DDK-B 定义与结论已被下一行的 D-030 取代**，原文保留以留痕（D-012）〕、[`06/STAGE5_PREREQUISITES.md`](06_porting_design/STAGE5_PREREQUISITES.md)（4 项硬前置 / 2 项可带条件 / 9 条禁带假设）；`05/09` 追加 §11。**三条新证据**：①**R49↔R56 的 UAPI 结构体 51 个共同定义、实质差异 0**（`mem_sync` 仅重命名；CSG 112→120 被 `_1_35` 逐字段迁移吸收）→ **U4-04b 闭合**，padding 风险由"单点致命"下调为"中"；②**R56 删除 6 个 ioctl**，含 MTK 私有 **80**（`INTERNAL_FENCE_WAIT`）→ U4-14 精确化，并关联"超时自愈"能力丢失；③**CSF 固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**（**不会 bootloop**），**U4-12 单列 BLOCKED**。**计数 27/5/5/3 → 27/5/6/1/15**；新增 D-026～D-029 |
 | 2026-11-16 | **Stage 4 剩余取证与 DDK 路线纠偏** | `stage4: correct DDK route to R49-derived and re-audit remaining items`：新增 [`06/STAGE4_REMAINING_AUDIT.md`](06_porting_design/STAGE4_REMAINING_AUDIT.md)（27 项逐项重核 + 5 项新发现 + 7 条更正留痕）、[`06/R49_DDK_ADAPTATION_PLAN.md`](06_porting_design/R49_DDK_ADAPTATION_PLAN.md)（**17 节** R49 深度改造预研框架，逐项 **CONFIRMED / LIKELY / UNKNOWN / BLOCKED**）、[`06/STAGE4_DEVICE_COLLECTION_PLAN.md`](06_porting_design/STAGE4_DEVICE_COLLECTION_PLAN.md)（11 段合并只读采集 + §6 `strace` 能力边界专章）、[`05_userspace_firmware/tools/collect_stage4_remainder.sh`](05_userspace_firmware/tools/collect_stage4_remainder.sh)（464 行 POSIX sh，`NOT_AVAILABLE` 逐工具容错，**仅为准备、未执行**）。**路线纠正（D-030）**：[`06/DDK_DUAL_TRACK_ASSESSMENT.md`](06_porting_design/DDK_DUAL_TRACK_ASSESSMENT.md) **重写至第 2 版**——DDK-B 由「R46 DDK」更正为「**R56 Kbase + R49-derived compatibility DDK**」，理由是 R46 的两条否决理由（时间线矛盾、CSG 落点未知）**不适用于 R49**；R46 内容移入 §4 并标记「已被用户最新路线决策取代」，**历史不删除**。**五条实质发现**：①**R49 kbase 内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（offset 40–111，是 R56 所查 `padding[62]` 的超集）→ U4-04c 未知面 **15 → 4**（`CS_QUEUE_REGISTER` 为剩余致命位）；②props 实为 **83 项共同 + 3 项新增**（86/87/88）、序列化缓冲 **749 → 781 B**（「568/592」仅为人工推算）；③ioctl 集合 **54 → 50**（删 6 增 2），且 **ioctl 55 在 CSF 上本就是 no-op**；④**R49 已完整支持 `tKRx`**（`features` 与 R56 逐项相同，`issues` 差 3 项且全在 kbase 侧）；⑤OEM 构建**已启用** `CONFIG_MALI_MTK_FENCE_DEBUG`（`strings` 证据）。**计数 5/6/1/15 → 5/8/1/13**（U4-14、U4-15 转 PARTIAL，D-033）；新增 **D-030～D-033**，D-028 的路线部分被取代 |
 | 2026-11-16 | **第一轮真机采集 + 脚本修复** | `stage4: fix collector output channel and ingest round-1 device evidence`：用户执行脚本 v1.0 并回传 zip。①**修复 v1.0 输出缺陷**——43 处原始命令管道只写 stdout，回传文件只有计数层；v1.1 改 `tee` 单通道，本机验证文件与终端 `diff` 0 行，加 `SELFCHECK`。②**新增** [`05/evidence/stage4_round1_20261116/`](05_userspace_firmware/evidence/stage4_round1_20261116/README.md)：kbase **513** / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号。③**三条实测**：GPU=`Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在设备构建上**确证为开**（U4-14 子项升 [D·A]）；`ged.ko` 零 import kbase 符号。④计数不变 **27/5/8/1/13**；B/D/H/J/K/C 六段需重跑补齐 |
+| 2026-11-16 | **第二轮真机采集回传** | `stage4: ingest round-2 device evidence and fix v1.1 read-out defects`：用户执行脚本 **v1.1** 并回传（`SELFCHECK = 668`，770 行，文件与终端 `diff` 0 行）。**①3 项闭合**：U4-20（SF 后端 = `RE GLES (Ganesh)`）、U4-26（内核 build-id `0c637c57…`）、U4-27（`/vendor`/`/vendor_dlkm` 为 erofs 只读、无 overlay）。**②4 项推进**：U4-11（`entry_end_offset = 1000`，首 entry INTERFACE/32 B 自洽）、U4-17（`vulkan.mali.so` 已定义函数只有 `mali_vk_vendor_stub` **24 B** → 是桩不是实现，REA 目标应改为 `libGLES_mali.so`）、U4-21（25 进程持有 `/dev/mali0`）、U4-23（`DT_NEEDED` 全表）。**③固件阻断锁死**：R56p0 要求 header `(0,4)` 且 `!=` 严格相等（`csf_firmware.c:86`/`:2698`），设备实测 `0.3` → **header 校验阶段即 `-EINVAL`，早于 entry 解析** → 不可由 DDK 改造消除。**④脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则顺序）已修 **v1.2** 并本机验证；连带作废 `taint=0`、`build-id 474e5500…`、`GLOBAL DEFAULT FUNC: 0` 三项旧读数。**⑤新增** [`05/evidence/stage4_round2_20261116/`](05_userspace_firmware/evidence/stage4_round2_20261116/README.md)（3 份文本，无二进制）。**计数 5/8/1/13 → 8/12/1/6**（`D-034`），总数 27、**P0 仍 3 且一项未动** |

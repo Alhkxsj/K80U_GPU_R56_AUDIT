@@ -84,7 +84,8 @@ rd() {
 
 # fsize <path> -> 字节数或 NOT_AVAILABLE
 fsize() {
-    stat -c %s "$1" 2>/dev/null || echo NOT_AVAILABLE
+    # -L：跟随符号链接取目标文件大小（v1.1 用 -c 会把 symlink 自身长度当文件大小）
+    stat -Lc %s "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo NOT_AVAILABLE
 }
 
 # =============================================================================
@@ -94,7 +95,7 @@ main() {
 
 sec "A. 环境与指纹"
 say "COLLECT_TIME   : $(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo NOT_AVAILABLE)"
-say "SCRIPT_VERSION : stage4-remainder v1.1"
+say "SCRIPT_VERSION : stage4-remainder v1.2"
 say "OUTPUT_DIR     : $OUTDIR"
 say "UID            : $(id -u 2>/dev/null || echo NOT_AVAILABLE)"
 say "SELINUX_CTX    : $(id -Z 2>/dev/null || echo NOT_AVAILABLE)"
@@ -220,8 +221,17 @@ if [ -d "$MODKB" ]; then
     say "  vermagic    : $(cat "$MODKB/vermagic" 2>/dev/null || echo NOT_AVAILABLE)"
     HOLD="$(ls -1 "$MODKB/holders" 2>/dev/null | tr '\n' ' ')"
     say "  holders     : ${HOLD:-NONE}"
-    if [ -r "$MODKB/notes/.note.gnu.build-id" ]; then
-        say "  build-id    : $(od -An -tx1 -j 12 -N 20 "$MODKB/notes/.note.gnu.build-id" 2>/dev/null | tr -d ' \n')"
+    NOTE="$MODKB/notes/.note.gnu.build-id"
+    if [ -r "$NOTE" ]; then
+        # note 布局 = namesz(4) descsz(4) type(4) name(对齐到 4) desc
+        # v1.1 固定从 offset 12 读 20 字节，会把 name "GNU\0" 当成 desc 的前 4 字节（错）
+        NSZ="$(od -An -tu4 -j 0 -N 4 "$NOTE" 2>/dev/null | tr -d ' \n')"
+        DSZ="$(od -An -tu4 -j 4 -N 4 "$NOTE" 2>/dev/null | tr -d ' \n')"
+        case "${NSZ:-x}" in ''|*[!0-9]*) NSZ=4 ;; esac
+        case "${DSZ:-x}" in ''|*[!0-9]*) DSZ=20 ;; esac
+        NOFF=$(( 12 + ( (NSZ + 3) / 4 ) * 4 ))
+        say "  note hdr    : namesz=$NSZ descsz=$DSZ desc_off=$NOFF"
+        say "  build-id    : $(od -An -tx1 -j "$NOFF" -N "$DSZ" "$NOTE" 2>/dev/null | tr -d ' \n')"
     else
         say "  build-id    : section file absent"
     fi
@@ -246,12 +256,15 @@ done
 say "  读法：期望 \"Mali-G925-Immortalis 12 cores r0pX 0x........\"。"
 say "        若为 G725 或核数≠12，说明 MC12 识别不符，需重核。"
 
-sub "E-3 GPU 链路模块的 taint 列（排除强制装载 F）"
+sub "E-3 GPU 链路模块表：refs / deps / state（taint 单列另读）"
 if [ -r /proc/modules ]; then
-    grep -Ei '^(ged|mali|gpufreq|mtk_)?.*(mali|ged|gpueb|gpufreq)' /proc/modules 2>/dev/null | head -20 | \
-        awk '{printf "  %-34s size=%-9s refs=%-3s state=%-8s taint=%s\n", $1,$2,$3,$5,$6}'
-    say "  --- 含 taint 标记的行 ---"
-    grep -E ' (Live|Loading) ' /proc/modules 2>/dev/null | awk '$6!="-" {printf "  %-34s taint=%s\n",$1,$6}' | head -20
+    grep -Ei '(mali|ged|gpueb|gpufreq)' /proc/modules 2>/dev/null | head -24 | \
+        awk '{printf "  %-34s size=%-9s refs=%-4s deps=%-26s state=%s\n", $1,$2,$3,$4,$5}'
+    say "  说明：/proc/modules 的列 = name size refs deps state address。"
+    say "        第 6 列是加载地址（kptr_restrict 下为 0），**不是 taint**；"
+    say "        v1.1 曾把第 6 列标成 taint，本版更正。"
+    say "        tainted（全局）= $(cat /proc/sys/kernel/tainted 2>/dev/null || echo NOT_AVAILABLE)"
+    say "        deps 列直接给出\"本模块被谁依赖\"，是 kbase 依赖面的第一手读数。"
 else
     say "NOT_READABLE: /proc/modules"
 fi
@@ -376,6 +389,9 @@ if need readelf "ELF metadata"; then
         [ -e "$so" ] || continue
         say ""
         say "  [J] $so"
+        if [ -L "$so" ]; then
+            say "      symlink -> $(readlink "$so" 2>/dev/null || echo NOT_AVAILABLE)（以下按目标文件读取）"
+        fi
         say "      size  : $(fsize "$so")"
         if need sha256sum "hash"; then
             say "      sha256: $(sha256sum "$so" 2>/dev/null | awk '{print $1}')"
@@ -386,11 +402,14 @@ if need readelf "ELF metadata"; then
         readelf -d "$so" 2>/dev/null | grep -E 'SONAME|RPATH|RUNPATH' | head -10 | sed 's/^ */        /'
         say "      -- dynsym 统计 --"
         DS="$(readelf --dyn-syms -W "$so" 2>/dev/null || readelf -sW "$so" 2>/dev/null)"
-        say "        total dynsym lines : $(printf '%s\n' "$DS" | grep -c '^ *[0-9]' 2>/dev/null || echo 0)"
-        say "        GLOBAL DEFAULT FUNC: $(printf '%s\n' "$DS" | grep -c 'GLOBAL.*DEFAULT.*FUNC' 2>/dev/null || echo 0)"
-        say "        GLOBAL DEFAULT OBJ : $(printf '%s\n' "$DS" | grep -c 'GLOBAL.*DEFAULT.*OBJECT' 2>/dev/null || echo 0)"
-        say "      -- 导出符号样本（GLOBAL DEFAULT，≤20）--"
-        printf '%s\n' "$DS" | grep 'GLOBAL.*DEFAULT' | head -20 | sed 's/^ */        /'
+        # readelf 列序为 Num: Value Size Type Bind Vis Ndx Name，
+        # 即 FUNC/OBJECT 在 GLOBAL 之前；v1.1 写成 GLOBAL.*DEFAULT.*FUNC 永远匹配不到
+        say "        total dynsym lines : $(printf '%s\n' "$DS" | grep -c '^ *[0-9]')"
+        say "        GLOBAL DEFAULT FUNC: $(printf '%s\n' "$DS" | grep -c 'FUNC.*GLOBAL.*DEFAULT')"
+        say "        GLOBAL DEFAULT OBJ : $(printf '%s\n' "$DS" | grep -c 'OBJECT.*GLOBAL.*DEFAULT')"
+        say "        defined (Ndx!=UND) : $(printf '%s\n' "$DS" | awk '$1 ~ /^[0-9]+:/ && $7 != "UND"' | wc -l | tr -d ' ')"
+        say "      -- 已定义符号样本（Ndx!=UND，≤15；libgpud / libgpud_sys 对照的关键）--"
+        printf '%s\n' "$DS" | awk '$1 ~ /^[0-9]+:/ && $7 != "UND"' | head -15 | sed 's/^ */        /'
     done
 else
     say "SKIP: readelf 不可用"

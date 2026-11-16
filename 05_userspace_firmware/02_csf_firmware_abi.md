@@ -206,7 +206,23 @@ adb shell "od -An -tx1 -N 8 /vendor/firmware/mali_csffw.bin"
 | 0x06–0x07 | `00 00` | *（源码未读取，保留）* | — | 不参与校验 |
 | 0x08–0x0B | `00 00 0a 03` | `version_hash` | `0x030A0000` | 仅用于打印 / ktrace，见下方纪律 |
 | 0x0C–0x0F | `00 00 00 00` | *（源码未读取）* | — | — |
-| 0x10–0x13 | **未采集** | `entry_end_offset` | — | 本轮只读到 offset 15 |
+| 0x10–0x13 | **`e8 03 00 00`** | **`entry_end_offset`** | **1000**（`0x3E8`） | ✅ `1000 ≤ 307 200` → **截断检查必过**（2026-11-16 补采） |
+
+**2026-11-16 补采：`entry_end_offset` 与首个 entry**（`stage4_remainder_20261116_131307.txt` §B-1）
+
+前 24 字节完整读出：
+
+```
+6e 3a f1 c3 03 00 00 00 00 00 0a 03 00 00 00 00
+e8 03 00 00 00 20 00 00
+```
+
+- `0x10` = `e8 03 00 00` → **`entry_end_offset = 1000`**。源码 `:2787` 的截断检查是 `if (entry_end_offset > mcu_fw->size)`，而文件 307 200 字节 → **必然通过**（[E1]+[D·A]）。
+- `0x14` = `00 20 00 00` → 首个 entry 的 `header = 0x00002000`。按 `entry_type = header & 0xFF`、`entry_size = (header >> 8) & 0xFF`（`:177-180`）拆解：**type = 0（`INTERFACE`）、size = 32 字节**。`load_firmware_entry` 的三项校验（4 字节对齐、`size ≥ 4`、`size ≥ 0x14+4`）全部通过。
+- 尾部 32 字节全 `00`；尾部 4 KiB 可打印串 **0 条** → 固件尾部**不携带版本信息**。
+
+> 一个随机损坏的 header 几乎不可能同时给出「type=0 + size=32」且三项长度校验全过，所以这是一条**强自洽证据**：entry 表在 `0x14` 处正常起步。
+> 完整解析见 [`evidence/stage4_round2_20261116/firmware_header.md`](evidence/stage4_round2_20261116/firmware_header.md)。
 
 **结论（三条，逐条给等级）**：
 
@@ -530,7 +546,7 @@ static int kbase_csf_early_init(struct kbase_device *kbdev)
 | --- | --- | --- | --- |
 | ~~U4-01~~ | ~~原厂固件 offset 4/5 的实际值~~ | **✅ 已闭合 2026-11-15 23:20**：`03` / `00` → 0.3 | 已升为 **[D·A]**，见 §3.0.5 |
 | U4-10 | 固件加载失败后 Android 图形栈的实际降级行为 | 实机故障注入 + dmesg | 决定"是否变砖"还是"仅无 GPU 加速" |
-| U4-11 | 原厂固件 GLB 尾部的实际版本号（major.minor.patch） | 运行时读 `GLB_VERSION` 寄存器，或采集 dmesg 中固件自报 | 影响 §5 门槛判定的实际触发情况。**注意：header 的 `version_hash` 不能替代此项** |
+| U4-11 | 原厂固件 GLB 尾部的实际版本号（major.minor.patch） | 运行时读 `GLB_VERSION` 寄存器，或采集 dmesg 中固件自报 | 影响 §5 门槛判定的实际触发情况。**注意：header 的 `version_hash` 不能替代此项**。<br>**2026-11-16 进展**：`entry_end_offset` 子项已闭合（= 1000，§3）；尾部零填充已证实**不携带版本**，故本条只剩"运行时 GLB 版本"一个缺口，且 `dmesg`/`debugfs` 两条路均已排除（`06/STAGE4_REMAINING_AUDIT.md` §2 N-7） |
 | U4-12 | R56p0 官方固件的 core mask / 型号字段是否匹配 G925 MC12 | R56p0 固件实体 | 决定固件能否驱动该 SKU |
 | U4-13 | `GLB_PRFCNT_NEURAL_EN`、`GLB_REQ_NX_PWR_MODE_ENABLE` 是否被 MTK 平台层使用 | 运行时 | 仅影响 NX 相关特性 |
 

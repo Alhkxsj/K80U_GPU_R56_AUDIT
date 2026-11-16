@@ -390,13 +390,26 @@ EXTRA_8_15:  00 00 0a 03 00 00 00 00
 | 0x06–0x07 | `00 00` | 保留（源码未读取） | — | 不参与校验 |
 | 0x08–0x0B | `00 00 0a 03` | `version_hash` | `0x030A0000` | 仅打印 / ktrace，见下 |
 | 0x0C–0x0F | `00 00 00 00` | 保留（源码未读取） | — | — |
-| 0x10–0x13 | **未采集** | `entry_end_offset` | — | 本轮只读到 0x0F |
+| 0x10–0x13 | **`e8 03 00 00`** | **`entry_end_offset`** | **1000**（`0x3E8`） | ✅ ≤ 307 200 → 截断检查必过（2026-11-16 补采） |
 
 **三条判定**：
 
 1. **header = `0.3`**，[D·A]。与 `02` §3.1 的 `FIRMWARE_HEADER_VERSION_MINOR(r49p1) = 3` 精确相等。
 2. **r56p0 必拒**：`3 != 4` → `-EINVAL`。组合 B 的否决由 [E2] 升为 **[E1]+[D·A]**。
 3. **原厂配套自洽**：固件 0.3 + kbase `r49p1-03bet0` + DDK `r49p1-03bet0`（见 §5.4），三者同代。
+
+**2026-11-16 补采（`stage4_remainder_20261116_131307.txt` §B）**
+
+| 项 | 读数 | 判读 |
+| --- | --- | --- |
+| `entry_end_offset`（`0x10`） | **1000** | 源码 `:2787` 的 `if (entry_end_offset > mcu_fw->size)` 必不触发 → **固件不截断** |
+| 首 entry header（`0x14`） | `0x00002000` → **type=0（INTERFACE）/ size=32 B** | 三项对齐与长度校验全过 → entry 表正常起步 |
+| 尾部 32 字节 | 全 `00` | 零填充 |
+| 尾部 4 KiB 可打印串 | **0 条** | 尾部**不携带版本** |
+
+**第 3 条的等级升级**：用户态 GLES 驱动在 `dumpsys SurfaceFlinger` 里自报 `GLES: ARM, Mali-G925-Immortalis MC12, OpenGL ES 3.2 v1.r49p1-03bet0.4505ac17...` —— 与 kbase 的 `r49p1-03bet0` **逐字符相同**。所以"三者同代"从 [E1]（源码 `MODULE_VERSION` 与 DDK 内嵌串）升为 **[D·A] 双侧实测**。
+
+> 完整解析：[`evidence/stage4_round2_20261116/firmware_header.md`](evidence/stage4_round2_20261116/firmware_header.md)。
 
 > **⚠️ `version_hash` 防误用（必须写入本节）**
 >

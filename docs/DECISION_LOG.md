@@ -409,6 +409,20 @@
 
 ---
 
+### D-034 · 第二轮真机采集判读：计数 **8 / 12 / 1 / 6**；**固件 header 0.3 vs 0.4 的阻断被锁死**；脚本升 v1.2
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | ①**采纳第二轮真机采集**（`stage4_remainder_20261116_131307.txt`，`SELFCHECK = 668`，全程只读），Stage 4 五态由 **5/8/1/13** 更新为 **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**（总数 27，**P0 仍 3**）。②**U4-12 的阻断机制定性为一行比较**：R56p0 要求 CSF 固件 header `(major 0, minor 4)` 且用 `!=` **严格相等**（`csf_firmware.c:86`/`:2698`），设备固件实测 `0.3` → **在 header 校验阶段即 `-EINVAL`，早于 entry 解析**。故"固件约束可由 DDK 改造消除"**在源码层面不成立**。③采集脚本由 v1.1 升 **v1.2**，修三处**判读**缺陷（列语义 / note 偏移 / 正则顺序）。 |
+| **背景** | 用户在 aShell You（已 root）执行 `collect_stage4_remainder.sh` v1.1 并回传 zip。v1.1 修好了 v1.0 的"输出不落盘"缺陷（`SELFCHECK` 由缺失变为 668，远超 300 阈值），但暴露出三处**数据取到、标签贴错**的问题。 |
+| **计数变化** | CLOSED 5→**8**：U4-20（`RE GLES (Ganesh)`）、U4-26（内核 build-id `0c637c57…`）、U4-27（`/vendor` erofs 只读、无 overlay）。PARTIAL 8→**12**：U4-11（`entry_end_offset = 1000`）、U4-17（`vulkan.mali.so` 是 24 B 的桩）、U4-21（25 进程持有 `/dev/mali0`）、U4-23（`DT_NEEDED` 全表）。OPEN 13→**6**：U4-02、U4-13、U4-16、U4-18、U4-19、U4-22。 |
+| **三处脚本缺陷** | ①`E-3` 把 `/proc/modules` 第 6 列（**加载地址**，`kptr_restrict` 下为 0）标成 `taint`；②`D-4` 从 note 偏移 `12` 读 build-id，把 name `"GNU\0"` 当成 desc 前 4 字节（desc 实起于 `16`）；③`J` 段用 `GLOBAL.*DEFAULT.*FUNC` 匹配 readelf，但列序是 `FUNC GLOBAL DEFAULT`，永远 0 命中（假 0）。另有 `fsize` 未跟随符号链接、`E-3` 标题名不符两处小问题。**五项全部修于 v1.2 并本机验证**。 |
+| **为何重要** | ①**P0 一项未动**——闭合的三项全在 P2，说明只读采集的能力边界就是"静态事实"，够不到 P0 需要的**行为**与**商业件**。这条比数字本身更重要，可防止下一轮误判"再采一次就能闭合 P0"。②固件阻断被锁死后，**任何"改 header 字节 / 调参 / 换 DDK 绕过"的方案都可直接否决**，不必再论证。③三处缺陷说明**采集必须有自证项**（`SELFCHECK`、`note hdr` 回显、计数行），否则"采到"≠"读对"。 |
+| **证据来源** | `05_userspace_firmware/evidence/stage4_round2_20261116/`（`README.md` / `firmware_header.md` / `key_readings.md`）；`06/STAGE4_REMAINING_AUDIT.md` §2 N-7、§4、§5；`06/STAGE4_DEVICE_COLLECTION_PLAN.md` §10 |
+| **证据等级** | **[D·A]**（设备直读）+ **[E1]**（两侧源码）+ **[D·B]**（设备在渲染） |
+| **状态** | 生效 |
+| **再审议** | ①取得 R56p0 `mali_csffw.bin`（header 0.4）→ U4-12 可重判；②补采 `readelf --dyn-syms` 的 `Ndx!=UND` 符号 → U4-23 可闭合；③若日后发现脚本在其它设备上误判，须复核本条计数 |
+
 ### D-028 · DDK 双路线：**DDK-A（R56）为首选**；~~DDK-B（R46）不可推荐~~ → **DDK-B 已于 2026-11-16 改为 R49-derived（见 D-030）**
 
 | 项 | 内容 |
@@ -475,7 +489,8 @@
 | **D-030** | **DDK-B 改为 R56 Kbase + R49-derived compatibility DDK；R46 退出备选** | **生效（路线）／效果未验证** | 取得 R56 DDK 或确认 R49 源码不可得 |
 | **D-031** | **R49 kbase 内联校验 padding（9 处）；U4-04c 收窄到 4 条，仍不闭合** | **生效** | DDK 源码/反汇编确认 `CS_QUEUE_REGISTER` |
 | **D-032** | **props：83 共同 + 3 新增；序列化缓冲 749 → 781 B** | **生效** | 编译对拍（本阶段禁止） |
-| **D-033** | **五态登记规则统一；计数 5/8/1/13** | **生效** | 新证据即可 |
+| **D-033** | **五态登记规则统一；计数 5/8/1/13**（已被 D-034 更新计数） | **生效** | 新证据即可 |
+| **D-034** | **第二轮真机采集判读；计数 8/12/1/6；固件 header 0.3 vs 0.4 阻断锁死；脚本 v1.2** | **生效** | 取得 R56 固件 / 补采导出符号 |
 
 ---
 
@@ -490,3 +505,4 @@
 | 2026-11-16 | **Stage 4 收尾核验轮**：**D-021 改写**（"绕过 `same_magic()`"证伪——`CONFIG_MODVERSIONS` 下 release 串本就不比，装载合法；真正会掩盖 CRC 错误的是 `bad_version` 补丁，默认关闭）；新增 D-023（U4-25 拆 a/b/c，`check_version` 补丁在运行态不可观测）、D-024（`uname -v` 是补丁月派生常量，不得作构建时间）、D-025（padding 强制校验 15 处，R-C2 上调为"GPU 不可用"）。共 25 条 |
 | 2026-11-16 | **Stage 4 全量收尾轮**：新增 **D-026**（U4-04 拆 a/b/c，**b 闭合**：51 个共同结构体、实质差异 0）、**D-027**（padding 风险由"单点致命"下调为"中"，因 D-026 + UAPI 契约 + 5 处主动清零）、**D-028**（DDK 双路线：A 唯一推荐、B 不可推荐——不解除固件阻断、G925 时间线矛盾、CSG size 落点未知）、**D-029**（五态登记；U4-12 单列 BLOCKED；U4-10 转 PARTIAL——固件在 `open()` 加载不在 probe）。**D-025 保留但加"后续修正"指向 D-026**。共 29 条 |
 | 2026-11-16 | **Stage 4 剩余取证与路线纠偏轮**（TASK-STAGE4-REMAINDER）：<br>①**D-028 的路线部分被取代**——新增 **D-030**：DDK-B 由「R46 DDK」更正为「**R56 Kbase + R49-derived compatibility DDK**」。理由是 R46 的两条缺点（时间线矛盾、CSG 落点未知）**不适用于 R49**：R49 的 `tKRx` features 与 R56 **逐项相同**、CSG 落点已知为 nr 58 / 112 B、且它本就是这台手机在跑的 DDK。R46 内容保留在 `06/DDK_DUAL_TRACK_ASSESSMENT.md` §4 并标记"已被取代"。<br>②新增 **D-031**：**R49 kbase 内联校验 padding（9 处）**，推翻 D-027 的"R49 不校验"前提；U4-04c 的未知面由 15 项收窄为 4 项（`CS_QUEUE_REGISTER` 为剩余致命位），**仍不闭合**。<br>③新增 **D-032**：props 口径更正——**83 共同 + 3 新增**（86/87/88）、序列化缓冲 **749 → 781 B**（+32）；"568/592"仅是 `sizeof(gpu_props_user_data)` 的人工推算。<br>④新增 **D-033**：五态判定规则统一（PARTIAL = 有子项闭 + 有子项开），计数 **5/6/1/15 → 5/8/1/13**（U4-14、U4-15 转 PARTIAL），总数 27、P0 仍 3。<br>**D-027 加"后续修正"指向 D-031**。共 **33 条** |
+| 2026-11-16 | **第二轮真机采集回传轮**（`stage4: ingest round-2 device evidence and fix v1.1 read-out defects`）：用户执行脚本 **v1.1** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 668`，报告 56,138 B / 770 行）。<br>①新增 **D-034**：五态 **5/8/1/13 → 8/12/1/6**（U4-20/26/27 闭合，U4-11/17/21/23 转 PARTIAL），总数 27、**P0 仍 3**。<br>②**固件阻断锁死**：R56p0 要求 header **0.4** 且 `!=` 严格相等（`csf_firmware.c:86`/`:2698`），设备固件实测 **0.3** → 在 header 校验阶段即 `-EINVAL`，早于 entry 解析 → **不可由 DDK 改造消除**，任何「改 header 字节绕过」的方案可直接否决。<br>③**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则顺序）已修 **v1.2** 并本机验证；连带确认「`taint=0`」「`build-id 474e5500…`」「`GLOBAL DEFAULT FUNC: 0`」三项此前读数**均不可引用**。<br>④新增证据目录 `05_userspace_firmware/evidence/stage4_round2_20261116/`。<br>**D-033 的计数被本条更新**（规则不变）。共 **34 条** |

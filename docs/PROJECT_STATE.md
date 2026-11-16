@@ -6,9 +6,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最后更新 | 2026-11-16 07:30（GMT+8） |
-| 更新提交 | `stage4: correct DDK route to R49-derived and re-audit remaining items`（本轮） |
-| 提交前基准 HEAD | `bbaeaf2416c49b451fdada707bfd9d95bdd758aa`（`stage4: finalize stage 4 with full-state ledger and DDK dual-track assessment`） |
+| 最后更新 | 2026-11-16 13:40（GMT+8） |
+| 更新提交 | `stage4: ingest round-2 device evidence and fix v1.1 read-out defects`（本轮） |
+| 提交前基准 HEAD | `faae6737d5fcec85d7f8a96bc7bf915126c48741`（`stage4: fix collector output channel and ingest round-1 device evidence`） |
 | 分支 | `main` |
 | 精确 SHA 查询 | `git log -1 --format='%H %s'` |
 
@@ -44,7 +44,7 @@
 | Stage 2 | kbase / CSF 差异审计 | ✅ 完成（7 份，45 条差异 / 13 P0） | ✅ |
 | Stage 3 | MTK 平台层审计 | ✅ 完成（7 份，保留 10 / 适配 2 / 重写 0） | ✅ |
 | Stage 3-REA | 二进制逆向补充 | ✅ 完成（8 份，12 个 `.ko` / 5,440 函数） | ⚠️ 数值基线需按 §5.4 重导 |
-| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份 + `06/` 五份收尾/纠偏台账） | ⚠️ **收尾完成，未闭环**：27 项 = CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13；**P0 3 项** |
+| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份 + `06/` 五份收尾/纠偏台账 + 两轮真机采集证据） | ⚠️ **收尾完成，未闭环**：27 项 = **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**；**P0 3 项（全部未动）** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | — |
 
 **"报告已交付"与"证据已闭环"是两种状态，不可互相替代。**
@@ -58,38 +58,47 @@
 | 项 | 数量 |
 | --- | --- |
 | 总数 | **27** |
-| ✅ CLOSED | **5**（U4-01 / U4-03 / U4-05 / U4-08 / U4-09） |
-| ⚠️ PARTIAL | **8**（U4-04 / U4-06 / U4-07 / **U4-10** / **U4-14** / **U4-15** / U4-24 / U4-25） |
+| ✅ CLOSED | **8**（U4-01 / U4-03 / U4-05 / U4-08 / U4-09 / **U4-20** / **U4-26** / **U4-27**） |
+| ⚠️ PARTIAL | **12**（U4-04 / U4-06 / U4-07 / U4-10 / **U4-11** / U4-14 / U4-15 / **U4-17** / **U4-21** / **U4-23** / U4-24 / U4-25） |
 | ⛔ BLOCKED | **1**（**U4-12**） |
-| ○ OPEN | **13** |
+| ○ OPEN | **6**（U4-02 / U4-13 / U4-16 / U4-18 / U4-19 / U4-22） |
 | ? UNKNOWN | **0** |
-| **P0** | **3**（U4-04 / U4-10 / U4-12） |
+| **P0** | **3**（U4-04 / U4-10 / U4-12）—— **一项未动** |
 
-> **本轮变化（2026-11-16 TASK-STAGE4-REMAINDER）**：五态判定规则统一为"**有子项闭 + 有子项开 = PARTIAL**"（`D-033`），据此 **U4-14 与 U4-15 由 OPEN 转 PARTIAL**（二者的子项 a 本轮闭合：删除清单独立复现 / 新增 props 与缓冲增量定量）。计数 **5/6/1/15 → 5/8/1/13**。总数 27、**P0 仍 3**。
+> **本轮变化（2026-11-16 第二轮真机采集，`D-034`）**：**CLOSED 5 → 8**（U4-20 SF 后端 = `RE GLES (Ganesh)`；U4-26 内核 build-id 取得；U4-27 `/vendor` 为 erofs 只读、无 overlay）；**PARTIAL 8 → 12**（U4-11 / U4-17 / U4-21 / U4-23 "主问题已答、细节未答"）；**OPEN 13 → 6**。总数 27、**P0 仍 3**。
 >
-> 上一轮（TASK-STAGE4-FINAL）的变化：改用五态；PARTIAL 5 → 6（U4-10 由 OPEN 转入）；U4-12 单列 BLOCKED；U4-04 拆 a/b/c，b 闭合。
+> **三轮趋势**：`5/6/1/15`（第一轮）→ `5/8/1/13`（`D-033` 规则统一）→ **`8/12/1/6`**（`D-034` 采集回传）。
+>
+> **必须记住的一条**：闭合的三项**全在 P2**，**P0 / P1 无一闭合**。这不是采集做得不够，而是 P0/P1 缺的是**行为**（padding 字节、故障表现、商业固件）与**调用面**（`strace`），只读采集拿不到。静态事实恰好把 P2 清完了。
 
 ### 3.2 P0 明细
 
 | ID | 内容 | 当前证据 | 闭合方式 |
 | --- | --- | --- | --- |
 | ~~U4-01~~ | ~~原厂 CSF 固件 header 实际字节~~ | ✅ **已闭合 [D·A]**：`6e 3a f1 c3 03 00 00 00` → `offset 4 = 0x03` / `offset 5 = 0x00` → **0.3** | 2026-11-15 23:20 `od` 读数（`05/07` §4.5、`05/02` §3.0.5） |
-| **U4-04** | 原厂 DDK 的 UK ABI / padding 是否清零 / props 是否严格校验 | **三子项**：**a ✅** 版本代次 `r49p1-03bet0` → UK 1.30 **[D·A]**；**b ✅** 结构体布局无实质差异（51 个共同结构体、实质差异 0）**[E1]**；**c ⚠️ 收窄**：15 个 R56 强制项中 **3 已证满足 / 4 结构上不用 / 8 待证**，剩余致命位 = `CS_QUEUE_REGISTER`（`D-031`） | 需 DDK 源码或反汇编看 `CS_QUEUE_REGISTER` 等 4 处的栈初始化 |
+| **U4-04** | 原厂 DDK 的 UK ABI / padding 是否清零 / props 是否严格校验 | **三子项**：**a ✅** 版本代次 `r49p1-03bet0` → **UK 1.30**（`/sys/module/.../version` 直读 **[D·A]**）；**b ✅** 结构体布局无实质差异（51 个共同结构体、实质差异 0）**[E1]**；**c ⚠️ 收窄**：15 个 R56 强制项中 **3 已证满足 / 4 结构上不用 / 8 待证**，剩余致命位 = `CS_QUEUE_REGISTER`（`D-031`）。**2026-11-16 二进制确证**：`Invalid reserved field not 0 in queue group create` / `padding is only supported for UMM` 两条串在**设备 ko** 里 → R49 的校验代码确实存在且运行时全部通过 | 需 DDK 源码或反汇编看 `CS_QUEUE_REGISTER` 等 4 处的栈初始化 |
 | **U4-10** | GPU 初始化失败后是否 bootloop | ⚠️ **PARTIAL**：**静态已排除启动阻断**——CSF 固件在首次 `open()` 加载、probe 不涉及，失败只让 `open` 返回错误，可重试；R49/R56 同构 **[E1]** | 故障注入（需可回滚环境，本轮禁止） |
-| **U4-12** | R56p0 固件是否匹配 G925 MC12 | ⛔ **BLOCKED**：R56 交付包 23 条目中 `firmware`/`.bin`/`ddk`/`csffw`/`libGLES`/`vulkan` 命中 **0** → 属商业授权件 **[E1]**。验收判据已扩至 6 条（含 GLB ≥ 1.1.0、entry 布局） | 取得固件后按 `06/STAGE4_REMAINING_AUDIT.md` §3.3 六项判据验收 |
+| **U4-12** | R56p0 固件是否匹配 G925 MC12 | ⛔ **BLOCKED**：R56 交付包 23 条目中 `firmware`/`.bin`/`ddk`/`csffw`/`libGLES`/`vulkan` 命中 **0** → 属商业授权件 **[E1]**。验收判据 6 条（含 GLB ≥ 1.1.0、entry 布局）。**2026-11-16 阻断机制锁死**：R56p0 要求 header `(0,4)` 且 `!=` **严格相等**（`csf_firmware.c:86`/`:2698`），设备固件实测 `0.3` → **在 header 校验阶段即 `-EINVAL`，早于 entry 解析** → **不可由 DDK 改造消除** | 取得固件后按 `06/STAGE4_REMAINING_AUDIT.md` §3.3 六项判据验收。**禁止改 header 字节冒充 0.4** |
 
 ### 3.3 来源审计新增项（**不是 P0**）
 
 | ID | 内容 | 优先级 | 现有证据 |
 | --- | --- | --- | --- |
-| U4-24 | 设备侧 GPU `.ko` 的**路径 / 文件大小 / SHA256 / vermagic / srcversion**（a）／**`__ksymtab` CRC 与 kCFI 常量**（b） | **P1** | **a ✅ 已闭合**（18 个文件，`05/07` §3.5）；**b 开放**，范围收窄至 kbase（`05/08` §3.7.6） |
+| U4-24 | 设备侧 GPU `.ko` 的**路径 / 文件大小 / SHA256 / vermagic / srcversion**（a）／**`__ksymtab` CRC 与 kCFI 常量**（b） | **P1** | **a ✅ 已闭合**（18 个文件，`05/07` §3.5）；**b 的 CRC 一半已取**：kbase **513** 条 / ged **241** 条 import 符号 + CRC32（`05/evidence/stage4_round1_20261116/`），其中 **84 条为 MTK 侧符号**；**kCFI 类型哈希未采** → 仍 PARTIAL |
 | **U4-14** | DDK 是否使用 R56 已删除的 ioctl | **P1** | ⚠️ **PARTIAL（本轮）**：子项 a ✅ 删除清单**独立复现**（生产 ioctl **54 → 50**，删 6 增 2）；**ioctl 55 在 CSF 硬件上本就是 no-op**（`limited_core_mask` 只被 JM 后端读）；**ioctl 80 在 OEM 构建里已启用**（`strings` 命中 `Internal fence wait`）。子项 b（DDK 是否调用）仍 OPEN |
 | U4-15 | DDK 对 props 新增 ID 的处理 | **P1** | ⚠️ **PARTIAL（本轮）**：子项 a ✅ **83 共同 + 3 新增**（`RAW_BASE_PRESENT`/`RAW_NEURAL_PRESENT`/`NUM_ACTIVE_GRANULARITY`），序列化缓冲 **749 → 781 B（+32）**，线上格式为 TLV（`D-032`）；子项 b（DDK 是否 `size=0` 探测）仍 OPEN |
 | U4-25 | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否也被绕过） | **P1** | **25a ✅ 闭合**：vermagic 串不符是 `CONFIG_MODVERSIONS` 的原生语义（`same_magic` 忽略 release 串），**不存在也不需要**绕过 **[E1]**；**25b 开放**：真正的开关是 `bypass-kernel` 改 `bad_version`，默认关闭、2026-08-29→10-30 门控恒失效，且该补丁在 CRC 匹配时无行为差异 → **运行态不可观测**；25c 未测 |
-| U4-26 | 设备当前 boot 是否即所链接 CI run 的产物 | P2 | **判据已更换**：`uname -v` 的日期是 `os_patch_level` 派生**常量**（`${YM}-05 04:20:00 UTC`），零信息量 **[E1]**；四项参数一致但不足以定论；缺内核 `build-id` |
-| U4-27 | `/vendor` 当前视图是否被 KSU/NoMount overlay 覆盖 | P2 | 未采 mount 表 |
+| U4-26 | 设备当前 boot 是否即所链接 CI run 的产物 | P2 | ✅ **已闭合（设备侧）**：**内核 `build-id = 0c637c57d1ad6f81f4de95c6dbbc92a8f9153408`**（`/sys/kernel/notes` 直读 20 B，2026-11-16）。此前判据已更换为 build-id（`uname -v` 的日期是 `os_patch_level` 派生常量，零信息量）。**与 CI 产物的一元比对未做**，属额外确认 |
+| U4-27 | `/vendor` 当前视图是否被 KSU/NoMount overlay 覆盖 | P2 | ✅ **已闭合**：`/vendor` = `erofs /dev/block/dm-13 ro`、`/vendor_dlkm` = `erofs dm-18 ro`，`mountinfo` 中**两者均无 overlay 条目**；overlay 仅覆盖 `/product`、`/system`、`/system_ext` 的子路径，`lowerdir` 指向 `mi_ext`/`mi_product`（2026-11-16）→ **本轮全部字节证据取自原厂只读镜像** |
 
-> 优先级分布（27 = 3 P0 + 8 P1 + 8 P2 + 3 P3 + 5 已闭合不计级）：P1 = U4-02 / U4-11 / U4-14 / U4-15 / U4-17 / U4-22 / U4-24 / U4-25；P2 = U4-06 / U4-07 / U4-16 / U4-19 / U4-20 / U4-21 / U4-26 / U4-27；P3 = U4-13 / U4-18 / U4-23。
+> 优先级分布（27 = 3 P0 + 8 P1 + 8 P2 + 3 P3 + 5 原闭合）：**未闭合 19 + 已闭合 8**。
+>
+> | 优先级 | 总数 | 未闭合 | 已闭合 |
+> | --- | ---: | ---: | ---: |
+> | **P0** | 3 | **3**（U4-04 / U4-10 / U4-12） | 0 |
+> | P1 | 8 | 8（U4-02 / U4-11 / U4-14 / U4-15 / U4-17 / U4-22 / U4-24 / U4-25） | 0 |
+> | P2 | 8 | 5（U4-06 / U4-07 / U4-16 / U4-19 / U4-21） | **3**（U4-20 / U4-26 / U4-27） |
+> | P3 | 3 | 3（U4-13 / U4-18 / U4-23） | 0 |
 
 ### 3.4 Stage 4 已确立的结论（按等级）
 
@@ -101,7 +110,7 @@
 | 组合 B（r56p0 Kbase + 原厂固件）**不可行** | **[E1] + [D·A]** | **实测否决**：要 0.4，实际 0.3 |
 | 原厂用户态**契约层**可保留（组合 C 候选），但须**整套**保留；DDK 版本代次 `r49p1-03bet0` | **[E1]** + **[D·A]** | 实现层行为未验证（U4-04 剩余子项） |
 | 原厂三方**配套**：固件 0.3 + kbase `r49p1-03bet0` + DDK `r49p1-03bet0` | **[D·A]** + **[D·C]** | 三条独立证据同代 |
-| Vulkan **存在**，是 133,416 B 薄壳（`vulkan.mali.so` 仅导出 `mali_vk_vendor_stub`，NEEDED `libGLES_mali.so`） | **[D·A]** | 兼容性随 GLES |
+| Vulkan **存在**，但 `vulkan.mali.so`（133,416 B）**是桩不是实现**：已定义函数只有 `mali_vk_vendor_stub`（**24 字节**），`DT_NEEDED` 首项 `libGLES_mali.so`，`RUNPATH $ORIGIN/../egl`，`vkAcquireImageANDROID` 为 `UND` | **[D·A]** | 真实现在 `libGLES_mali.so`；兼容性随 GLES。**「文件小 ≠ 好分析」——它小是因为它什么都没做** |
 | HWC / mapper **不链接** Mali DDK，但 NEEDED `libged` | **[D·A]** | 故障性质为**降级**，因 `ged.ko` 不反向依赖 kbase |
 | `libGLES_mali.so` 53,105,232 B / API 35 / 硬依赖 `libged`、`libgpud`、4 个 gralloc 私有库 | **[D·A]** | — |
 | 设备 `.ko` 与仓库基线 `.ko` **不是同一构建**（同 sublevel、不同提交） | **[D·A]** + **[E1]** | 见 §5.4 |
@@ -119,7 +128,13 @@
 | **ioctl 集合 54（R49）→ 50（R56）** | **[E1]** | 删 6 增 2（`CS_QUEUE_GROUP_CREATE_1_35` 是原编码改名、`CS_TILER_HEAP_SIZE` 是真新增）；此前写"55 个"不准确 |
 | **ioctl 55 在 CSF 硬件上是 no-op** | **[E1]** | `kctx->limited_core_mask` 的唯一消费者是 `backend/gpu/mali_kbase_jm_hw.c`（JM 后端）；`csf/` 内零引用 |
 | **GPU props：83 共同 + 3 新增；缓冲 749 → 781 B** | **[E1]** | 线上格式是 TLV（`u32 id` + `u8 type_size` + 值），不是结构体直拷；"568/592"是 `sizeof` 人工推算（`D-032`） |
-| **OEM 构建启用了 `CONFIG_MALI_MTK_FENCE_DEBUG`** | **[E1]** | 仓库基线 `mali_kbase_mt6991_r49.ko` 内含 `Internal fence wait timeouts…` 与 `ged_mali_event_notify_fence_timeout_event`；设备构建未直接验证（可由 `strings` 一条命令复核） |
+| **OEM 构建启用了 `CONFIG_MALI_MTK_FENCE_DEBUG`** | **[E1]** → **[D·A]** | 仓库基线含该串 **[E1]**；**2026-11-16 已在设备构建上复核**：`Internal fence wait`=1、`Internal fence timeouts`=4、`ged_mali_event_notify_fence_timeout_event`=2 → **ioctl 80 在 OEM 栈上确实可达** |
+| **用户态 DDK 与内核 kbase 同为 `r49p1-03bet0`** | **[D·A]**（双侧） | `dumpsys SurfaceFlinger` 自报 `GLES: ARM, Mali-G925-Immortalis MC12, OpenGL ES 3.2 v1.r49p1-03bet0.4505ac17...`；`/sys/module/mali_kbase_mt6991_r49/version` = `r49p1-03bet0`（UK 1.30）。此前只有 [E1] 推理 |
+| **CSF 固件 `entry_end_offset = 1000`，首 entry 为 INTERFACE / 32 B** | **[D·A]**+**[E1]** | `0x10 = e8 03 00 00`；`0x14 = 00 20 00 00` → type=0、size=32，三项对齐/长度校验全过。`1000 ≤ 307 200` → **截断检查必过**；尾部 4 KiB 无版本串 |
+| **R56 对固件 header 的校验是 `!=` 严格相等，0.3 必拒** | **[E1]**+**[D·A]** | R56p0 `csf_firmware.c:86` 要求 minor=4，`:2698` 用 `!=`；设备固件 minor=3 → **header 校验阶段即 `-EINVAL`，早于 entry 解析**。因固件在首次 `open()` 加载，**不 bootloop** |
+| **`/vendor` 与 `/vendor_dlkm` 是原厂只读镜像，无 overlay** | **[D·A]** | `erofs /dev/block/dm-13` / `dm-18`，`ro`；`mountinfo` 无 overlay 条目。overlay 仅覆盖 `/product`、`/system`、`/system_ext` 子路径，`lowerdir` 指向 `mi_ext`/`mi_product` |
+| **25 个进程持有 `/dev/mali0`** | **[D·A]** | 含 `surfaceflinger`、`camerahalserver`、`systemui`、`com.miui.home`、微信/QQ/输入法；节点 `crw-rw-rw- u:object_r:gpu_device:s0 10,282` |
+| **R49 kbase 内联 padding 校验在设备二进制里也有对应报错串** | **[D·A]** | `Invalid reserved field not 0 in queue group create`、`padding is only supported for UMM`（`D-031` 的源码结论获二进制确证） |
 
 ---
 
@@ -230,14 +245,16 @@
 | 2 | ~~闭合 U4-01 + 推进 U4-04~~ | 组合 B 判定升为实测；组合 C 前提落地 | ✅ **完成（`65006de` 工具 + 用户执行 + 本轮整合）** |
 | 3 | ~~评估 U4-24 设备侧模块身份采集是否必要~~ | 决定 Stage 3 常量是否必须重导 | ✅ 完成（`b1da0b9`） |
 | 4 | ~~执行 U4-24a 并整合~~ | 设备 `.ko` 身份落地 | ✅ **完成（`b1da0b9` 工具 + 用户执行 + 本轮整合）** |
-| 4b | **U4-24b 单样本比对**：设备端 `readelf -x __versions` 取 `ged.ko`（抽样）+ `mali_kbase_mt6991_r49.ko`（必取） | 判定 14 个模块的 CRC 能否整体沿用；kbase 必须单独重导 | 无（只读，纯文本） |
+| 4b | ~~**U4-24b 单样本比对**~~ | ✅ **CRC 部分完成**（第一轮）：kbase **513** / ged **241** 条 import + CRC32，`module_layout`=`0x4e276f37`。**kCFI 类型哈希未采** → 仍 PARTIAL | 无（一条 `readelf -SW \| grep -i cfi`） |
 | 4c | **U4-14 的调用面**：需 `strace` 看 ioctl 请求号（**不是**看 padding） | 确认 R49 DDK 是否调用 R56 已删的 8/12/32/35/55/80 | 低（root，只读；另见下条"更低成本替代"） |
 | 4d | ~~U4-04c 定性：一条 `strace` 看 padding 字节~~ | ❌ **方法作废**：`strace` 只解出 `_IOC(type,nr,size)`，**看不到结构体内容**（`06/STAGE4_DEVICE_COLLECTION_PLAN.md` §6） | — |
-| 4e | **U4-14 的最低成本替代（优先做）**：设备端 `strings mali_kbase_mt6991_r49.ko \| grep -c "Internal fence wait"` | 直接判定 ioctl 80 在**设备构建**上是否可达 → 若不可达，DDK 必然已容忍 `-ENOIOCTLCMD` | 无（一条命令） |
+| 4e | ~~**U4-14 的最低成本替代**~~ | ✅ **已完成（第一轮采集 G 段）**：`Internal fence wait`=1、`timeouts`=4、`ged_mali_event_notify_fence_timeout_event`=2 → **`CONFIG_MALI_MTK_FENCE_DEBUG` 在设备构建上确证为开**，ioctl 80 可达。**但"编入 ≠ 被调用"，U4-14 仍 PARTIAL** | — |
 | 5 | ~~处理 U4-25 / U4-26 / U4-27~~ | 界定第三方内核差异面与 vendor 视图真实性 | ✅ 复核完成：25a 闭合、25b 判据明确；26 判据更换；27 仍缺 mount 表 |
-| 6 | **执行合并后的只读采集**（待用户授权）：`05_userspace_firmware/tools/collect_stage4_remainder.sh` | 一次覆盖 U4-02/06/11/14/17/20/21/23/24b/25b/26/27 | 低（root，只读，输出到 `/sdcard/GPU_AUDIT_STAGE4/`） |
+| 6 | ~~**执行合并后的只读采集**~~ | ✅ **已执行两轮**：v1.0 因输出缺陷失败；**v1.1 成功**（`SELFCHECK = 668`）→ **3 项闭合、4 项推进**。脚本现为 **v1.2** | — |
+| 6b | **补采三条只读命令**（各一行，不必重跑全量） | ①`readelf --dyn-syms \| awk '$7!="UND"'` ×2 → U4-23；②`ls -l /vendor/lib64/egl/` + `getprop ro.egl.additional_libraries` → U4-06；③`readelf -SW \| grep -i cfi` → U4-24b | 无（只读） |
+| 6c | **U4-17 的 `api_version`**：`strings vulkan.mali.so \| grep -i icd` + 查 VINTF manifest 的 vulkan 段 | 补齐 U4-17 的最后一个子项 | 无（只读） |
 | 7 | U4-12：取得 R56 固件（商业交付件） | 按 `06/STAGE4_REMAINING_AUDIT.md` §3.3 **六项**判据验收 | **阻断**（资产不在手） |
-| 8 | U4-04c 残留（`CS_QUEUE_REGISTER` 等 4 处） | 需 R49 DDK **源码**（优先）或离线反汇编 `libGLES_mali.so`（次选） | 中（源码/资产） |
+| 8 | U4-04c 残留（`CS_QUEUE_REGISTER` 等 4 处） | 需 R49 DDK **源码**（优先）或离线反汇编**用户态 DDK**（次选）。**注意**：vulkan 薄壳已证为桩，反汇编目标应是 `libGLES_mali.so`（53 MB），不是那 133 KB | 中（源码/资产） |
 | 9 | **Stage 4 证据充分后**，再决定是否进入 Stage 5 | 设计 vs 定论分离 | — |
 
 ### 7.1 Stage 5 准入判定
@@ -251,6 +268,8 @@
 > **Stage 5 当前不允许自动启动。** 必须由用户显式授权；且 **Stage 5A 通过 ≠ 允许实施**（`D-011`）。
 >
 > **与上一版相比的变化**：U4-01 闭合使"设计层"的条件从"可双分支展开"变为"单分支"——固件必须换，没有"也许 0.4 能用"的余地。
+>
+> **本版（第二轮采集回传后）不变的部分**：三项判定**全部不变**。理由：本轮闭合的 U4-20/26/27 都在 P2，**P0 一项未动**；U4-12 反而把阻断机制锁得更死（header `0.4` 严格相等）。所以"可设计、不可定论、不可实施"的结论比上一版更稳。
 >
 > **本版（TASK-STAGE4-REMAINDER）修改的一条约束**：
 >
@@ -277,3 +296,4 @@
 | 2026-11-16 | **Stage 4 全量收尾 + DDK 双路线评估**（`stage4: finalize stage 4 with full-state ledger and DDK dual-track assessment`）：新增 `06/STAGE4_FINAL_REPORT.md`（27 项五态台账 + 风险登记 + 验收结论 **B**）、`06/DDK_DUAL_TRACK_ASSESSMENT.md`（DDK-A/DDK-B 11 行决策矩阵，推荐 DDK-A、否决 DDK-B）、`06/STAGE5_PREREQUISITES.md`（4 项硬前置 / 2 项带条件 / 9 条禁带假设）；`05/09` 追加 §11。**三条新证据**：①**UAPI 结构体 51 个共同定义、实质差异 0** → U4-04b **闭合**；②**R56 删 6 个 ioctl**（含 MTK 私有 80）→ U4-14 精确化；③**固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**。**计数 27/5/5/3 → 27/5/6/1/15**（五态）；新增 D-026 / D-027 / D-028 / D-029 |
 | 2026-11-16 | **Stage 4 剩余取证与路线纠偏**（`stage4: correct DDK route to R49-derived and re-audit remaining items`）：新增 `06/STAGE4_REMAINING_AUDIT.md`（27 项逐项重核 + 7 条更正留痕）、`06/R49_DDK_ADAPTATION_PLAN.md`（**17 节**预研框架 §0–§17，逐项 CONFIRMED/LIKELY/UNKNOWN/BLOCKED）、`06/STAGE4_DEVICE_COLLECTION_PLAN.md`（11 段合并只读采集方案）、`05/tools/collect_stage4_remainder.sh`（464 行，`NOT_AVAILABLE` 容错）。`06/DDK_DUAL_TRACK_ASSESSMENT.md` **重写第 2 版**：DDK-B 由 **R46** 更正为 **R49-derived compatibility DDK**（R46 移入 §4 留痕）。**五条实质发现**：①**R49 kbase 内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111，是 R56 检查范围的超集）→ U4-04c 未知面 **15 → 4**；②props 实为 **83 共同 + 3 新增**、序列化缓冲 **749 → 781 B**；③ioctl 集合 **54 → 50**，且 **ioctl 55 在 CSF 上是 no-op**；④**R49 已完整支持 `tKRx`**（features 与 R56 逐项相同，issues 差 3 项且全在 kbase 侧）；⑤OEM 构建**已启用** `CONFIG_MALI_MTK_FENCE_DEBUG`（`strings` 证据）。**计数 5/6/1/15 → 5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；新增 **D-030～D-033**，D-028 路线部分被取代 |
 | 2026-11-16 | **第一轮真机采集回传 + 脚本修复**（`stage4: fix collector output channel and ingest round-1 device evidence`）：用户执行 `collect_stage4_remainder.sh` **v1.0** 并回传 `GPU_AUDIT_STAGE4.zip`。①**发现脚本输出缺陷**：`say()` 落盘但 43 处原始命令管道只写 stdout → 回传文件只有计数层；**v1.1** 改为 `main 2>&1 | tee -a` 单通道，本机 `diff` 验证 0 行差，新增 `SELFCHECK`。②**新增证据目录** `05/evidence/stage4_round1_20261116/`：kbase **513** 条 / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号 → DDK-B 的接口面首次量化到符号级。③**三条实测结论**：GPU = `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在**设备构建**上确证为开（`Internal fence wait`=1）→ U4-14 可行性子项由 [E1] 升 [D·A]；`ged.ko` 零 import kbase 符号（Stage 3 定理实测复核）。④**计数不变 27/5/8/1/13**；U4-24b 仅闭 CRC 一半（kCFI 未采）。需重跑 v1.1 补 B/D/H/J/K/C 六段 |
+| 2026-11-16 | **第二轮真机采集回传**（`stage4: ingest round-2 device evidence and fix v1.1 read-out defects`）：用户执行脚本 **v1.1** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 668`，报告 56,138 B / 770 行，文件与终端 `diff` 0 行）。①**3 项闭合**：**U4-20**（SF 后端 = `------------RE GLES (Ganesh)------------`）、**U4-26**（内核 build-id `0c637c57…`）、**U4-27**（`/vendor`/`/vendor_dlkm` 为 erofs 只读、无 overlay）。②**4 项推进**：**U4-11**（`entry_end_offset = 1000`，首 entry INTERFACE/32 B 自洽，截断检查必过）、**U4-17**（`vulkan.mali.so` 已定义函数只有 `mali_vk_vendor_stub` **24 B** → 是桩不是实现）、**U4-21**（25 进程持有 `/dev/mali0`）、**U4-23**（两库 `DT_NEEDED` 全表）。③**阻断锁死**：R56p0 要求固件 header `(0,4)` 且 `!=` 严格相等（`csf_firmware.c:86`/`:2698`），设备实测 `0.3` → **header 校验阶段即 `-EINVAL`，早于 entry 解析** → 固件约束**不可由 DDK 改造消除**。④**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则顺序）已修 **v1.2** 并本机验证；连带作废三项旧读数（`taint=0`、`build-id 474e5500…`、`GLOBAL DEFAULT FUNC: 0`）。⑤新增证据目录 `05_userspace_firmware/evidence/stage4_round2_20261116/`（3 份文本，无二进制）。**计数 5/8/1/13 → 8/12/1/6**（`D-034`），总数 27、**P0 仍 3 且一项未动**；**三项 Stage 5 准入判定全部不变** |

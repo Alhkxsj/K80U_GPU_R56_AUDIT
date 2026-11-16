@@ -269,10 +269,15 @@
 | 固件由谁加载 | **kbase**，在首次 `open()`（不在 probe） | **CONFIRMED** |
 | DDK 能否影响 header 校验 | **不能**（校验在 kbase 的 `kbase_csf_firmware_load_init`） | **CONFIRMED** |
 | 改 R49 固件 header 冒充 0.4 | **禁止**，且无效（entry 表随 release 变） | **CONFIRMED** |
+| 失败发生点 | **header 校验**（`csf_firmware.c:2698`），**早于 entry 解析**（`:2794`）与 `parse_capabilities` | **CONFIRMED** [E1] |
+| 原厂固件完整性 | `entry_end_offset = 1000`（≤ 307,200 → 截断检查必过）；首 entry = INTERFACE / 32 B（三项长度校验全过）；尾部 4 KiB 无版本串 | **CONFIRMED** [D·A]+[E1]（2026-11-16） |
 
 **R56 固件验收判据**（6 条，见 `STAGE4_REMAINING_AUDIT.md` §3.3）：header 0.4 / magic / G925 MC12 core mask / GLB ≥ 1.1.0 / entry 布局与 R56 一致 / 同 release 交付。
 
 > **顺序问题（必须写进设计）**：没有 0.4 固件，R56 kbase 连 `open()` 都过不去，**DDK 改造得再完美也无处可跑**。因此固件是**前置**，不是**并行项**。
+>
+> **2026-11-16 实测后的一条补充**：两侧的版本校验**代码形状完全一致**（都是 `if (version_major != MAJOR || version_minor != MINOR)`），只是常量 `3ul` vs `4ul`。这说明不存在"某种宽松模式"可被利用——**它就是硬编码相等比较**。
+> 完整证据链：[`05_userspace_firmware/evidence/stage4_round2_20261116/firmware_header.md`](../05_userspace_firmware/evidence/stage4_round2_20261116/firmware_header.md) §5。
 
 ---
 
@@ -283,7 +288,7 @@
 | EGL 前端 | 系统 `libEGL.so`（API 37）承担；厂商只提供 GLES 驱动，由 loader `dlopen` 后取 `egl*` 入口 | 与 DDK 版本无关 | **CONFIRMED**（`05/07` §6） |
 | `libEGL_mali.so` | **不存在且不必存在** | — | **CONFIRMED** |
 | GLES 驱动 | `libGLES_mali.so` 单文件 53 MB，内含 EGL+GLES | 改造=重编这一个库 | **CONFIRMED** |
-| Vulkan | `vulkan.mali.so` **薄壳**（133 KB，仅 `mali_vk_vendor_stub`），主体在 `libGLES_mali.so` | **Vulkan 随 GLES 走**，不需要单独改造 | **CONFIRMED** |
+| Vulkan | `vulkan.mali.so` **是桩不是薄壳**：133,416 B，dynsym 仅 3 项，**唯一已定义函数 `mali_vk_vendor_stub` 只有 24 字节**，`DT_NEEDED` 首项 `libGLES_mali.so`，`RUNPATH $ORIGIN/../egl` | **Vulkan 随 GLES 走**，不需要单独改造；反汇编目标应是 `libGLES_mali.so` | **CONFIRMED**（2026-11-16 [D·A]） |
 | Vulkan `api_version` | VINTF 声明 `vulkan.version-1_3` | 薄壳内的 `api_version` 来源未查 | **UNKNOWN**（U4-17） |
 | MTK 私有 gralloc / allocator | `libGLES_mali.so` 硬依赖 4 个库 + allocator AIDL | 必须**整套**保留，不能只留 `libGLES_mali.so` | **CONFIRMED** |
 | MEOW 拦截层 | `/vendor/lib64/egl/libGLES_meow.so` 等 5 个 | 小米图形拦截/追踪层，与 DDK 加载顺序相关 | **UNKNOWN** |

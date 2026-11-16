@@ -69,7 +69,7 @@
 | 12 | **`tools/README_stage4_p0.md`** | 234 | 8,547 | `001e85e8e235ad1b` | 手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令）+ **本机执行结果摘要** |
 | 13 | **`tools/collect_gpu_module_identity.sh`** | 399 | 17,967 | `356175c51c874af3` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、路径多根搜索、压缩/内建降级判定）。**v1.1 修正 `ged$` 正则失效**（`08` §3.7.7） |
 | 14 | **`tools/README_gpu_module_identity.md`** | 199 | 9,217 | `2238d43031af3108` | **新增**：手机执行指南 + 三行核心判读表 + `lsmod` 尺寸口径说明 + 兜底命令 + 失败排查 |
-| 15 | **`tools/collect_stage4_remainder.sh`** | 490 | 21,623 | `git hash-object` | **v1.1（2026-11-16 修复）**：Stage 4 剩余项合并采集（11 段 A–K，只读、无 adb、无电脑依赖）。**v1.0 有输出缺陷**——43 处原始命令管道只写 stdout、不落盘，导致回传文件只有标题；v1.1 改为 `main 2>&1 | tee -a` 单通道，文件内容 ≡ 终端内容（本机 `diff` 验证 0 行差），无 `tee` 时用内置 `tee_a` 回退，并输出 `SELFCHECK: 数据行数` 供自检。输出统一到 `/sdcard/GPU_AUDIT_STAGE4/`（回退 `/data/local/tmp/`）；逐工具 `NOT_AVAILABLE` 容错。执行说明见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` |
+| 15 | **`tools/collect_stage4_remainder.sh`** | 509 | 23,037 | `git hash-object` | **v1.2**：Stage 4 剩余项合并采集（11 段 A–K，只读、无 adb、无电脑依赖）。v1.0 有输出缺陷（43 处原始命令管道只写 stdout）→ v1.1 改 `main 2>&1 \| tee -a` 单通道并加 `SELFCHECK`；**v1.2 修三处判读缺陷**：`/proc/modules` 列语义（taint 实为 address）、note build-id 偏移（`-j 12` → 按 namesz 算）、readelf 符号统计正则顺序（`FUNC.*GLOBAL.*DEFAULT`）；另 `fsize` 改 `stat -Lc` 跟随符号链接。**已执行两轮**（v1.0 失败 / v1.1 成功，`SELFCHECK = 668`）。执行说明见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` §9/§10 |
 | 15 | `MANIFEST.md` | 本文件 | — | — | — |
 
 > 行数 / 字节 / SHA256 由 §4.10 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
@@ -152,7 +152,7 @@
 | `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵；**§3.7.4 已于 v1.7 改写** |
 | **`09`** | ✅ | — | **新增**：Stage 4 收尾核验（四处更正 + 阻断清单 + 最终裁定 B） |
 
-> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13**（五态，见 §6.1；**2026-11-16 由 5/6/1/15 更新，`D-033`**），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
+> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**（五态，见 §6.1；**2026-11-16 第二轮采集后由 5/8/1/13 更新，`D-034`**），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
 ### 3.3 来源归属状态（A / B / C）
 
@@ -381,13 +381,25 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 原始 `__versions` 转储**未入库**（63 KB / 135 KB），只登记 SHA256，见该目录 `README.md`。
 
+## 5.3 证据目录：`evidence/stage4_round2_20261116/`
+
+> 第二轮真机采集的**判读结果**（2026-11-16 13:13，脚本 v1.1，`SELFCHECK = 668`）。只含文本，**不含任何二进制**。
+
+| 文件 | 内容 | 大小 |
+| --- | --- | ---: |
+| `README.md` | 采集成功指标、v1.1 三处判读缺陷与 v1.2 修法、补采命令、边界声明 | 6,877 B |
+| `firmware_header.md` | 固件 header 逐字段解析、entry 首项解码（INTERFACE/32 B）、截断检查、**R56 0.4 严格相等 → 0.3 必拒**、`/vendor` 无 overlay | 9,464 B |
+| `key_readings.md` | 十二组关键读数与台账影响、四条不采用数据的理由、`mtk_gpufreq` refs 旁证 | 8,251 B |
+
+原始报告 `stage4_remainder_20261116_131307.txt`（56,138 B）**未入库**，按需重新生成。
+
 **使用边界**：CRC 数值只对**本机这次构建**有效，**不得**复制到其它设备或其它构建（`AGENTS.md` 禁止表述 ⑤）。`kCFI` 类型哈希**未采集**。
 
 ---
 
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项：CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13）
+### 6.1 UNKNOWN 汇总（27 项：**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**）
 
 > 本节为 `05` 视角的摘要；**现行权威台账**为 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)。
 
@@ -484,3 +496,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-16 | **v1.8** | **Stage 4 全量收尾（TASK-STAGE4-FINAL）**：`09` 追加 **§11**（三条新证据 + 一条自我更正）。①**UAPI 结构体双向全量比对**：51 个共同结构体、实质差异 **0**（`mem_sync` 仅重命名 `handle`→`gpu_va`；CSG 112→120 的扩展被 `_1_35` 变体逐字段迁移吸收）→ **U4-04b 闭合**；②**R56 实际删除 6 个 ioctl**，含 MTK 私有 **80**（`INTERNAL_FENCE_WAIT`，仅超时上报与可选自愈 reset）与 **55**（`SET_LIMITED_CORE_COUNT`）→ U4-14 精确化；③**CSF 固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED**。**计数 27/5/5/3 → 27/5/6/1/15**（五态：CLOSED/PARTIAL/BLOCKED/OPEN/UNKNOWN） |
 | 2026-11-16 | **v1.9** | **Stage 4 剩余取证与 DDK 路线纠偏（TASK-STAGE4-REMAINDER）**：新增 `tools/collect_stage4_remainder.sh`（464 行，11 段合并只读采集，`NOT_AVAILABLE` 容错，**未执行**）。本目录四处口径更正：①**U4-04c 未知面由 15 项收窄到 4 项**——R49 kbase **内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111），是 R56 所查 `padding[62]` 的**真子集**（`D-031`）；②**props 实为 83 项共同 + 3 项新增**、序列化缓冲 **749 → 781 B**；「568/592」仅 `sizeof` 人工推算（`D-032`）；③**ioctl 54 → 50**（删 6 增 2），**ioctl 55 在 CSF 上本为 no-op**（唯一消费者是 JM 后端）；④**R49 已完整支持 `tKRx`**，`features` 与 R56 逐项相同。**计数 27/5/6/1/15 → 27/5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；P0 仍 3 |
 | 2026-11-16 | **v2.0** | **第一轮真机采集回传 + 脚本 v1.1**：用户执行脚本 v1.0 并回传 `GPU_AUDIT_STAGE4.zip`。①**发现并修复 v1.0 的输出缺陷**：`say()` 写文件、但 43 处原始命令管道只写 stdout → 回传文件只有计数层、无字节/行级内容；v1.1 改为单通道 `tee`，本机验证文件与终端 `diff` 为 0 行。②**可用的部分并入证据**：新增 `evidence/stage4_round1_20261116/`（kbase **513** 条 / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号）。③**三条实测结论**：GPU = `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在**设备构建上确证为开**（`Internal fence wait`=1）→ U4-14 的可行性子项升级为 [D·A]；`ged.ko` 不 import 任何 kbase 符号（Stage 3 定理实测复核）。④**计数不变 27/5/8/1/13**（U4-24b 只闭了 CRC 一半，kCFI 未采）。细目见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` §9 |
+| 2026-11-16 | **v2.1** | **第二轮真机采集回传 + 脚本 v1.2**：用户执行脚本 **v1.1** 并回传（`SELFCHECK = 668`，报告 56,138 B / 770 行，文件与终端 `diff` 0 行）。①**新增证据目录** `evidence/stage4_round2_20261116/`（3 份文本）：固件 header 逐字段 + entry 首项解码、十二组关键读数、脚本缺陷说明。②**3 项闭合**：U4-20（`RE GLES (Ganesh)`）、U4-26（内核 build-id）、U4-27（`/vendor` 无 overlay）。③**4 项推进**：U4-11（`entry_end_offset = 1000`）、U4-17（Vulkan 是 24 B 的桩）、U4-21（25 holders）、U4-23（`DT_NEEDED` 全表）。④**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则）已修 **v1.2**；连带作废 `taint=0`、`build-id 474e5500…`、`GLOBAL DEFAULT FUNC: 0` 三项旧读数。**计数 27/5/8/1/13 → 27/8/12/1/6**（`D-034`）；P0 仍 3 且一项未动 |

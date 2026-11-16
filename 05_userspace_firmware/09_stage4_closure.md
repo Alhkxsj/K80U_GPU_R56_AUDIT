@@ -313,6 +313,8 @@ copy_to_user(...)
 > **注（2026-11-16 第二轮）**：下表是**第一轮**的计数（PARTIAL 5），保留作历史。该轮增量为：**U4-04b 闭合**、**U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED** → 五态 **5 / 6 / 1 / 15**（§11）。
 >
 > **注（2026-11-16 第三轮，TASK-STAGE4-REMAINDER）**：计数再变为 **CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13**（`D-033`：U4-14、U4-15 由 OPEN 转 PARTIAL）。**现行权威台账**改为 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)；`06/STAGE4_FINAL_REPORT.md` 保留为时点快照。本轮另更正本文一处**方法学错误**：§7 的 U4-04 行曾把「`strace` 抓 padding 字节」列为可行闭合手段，实际 `strace` 只能解出 `_IOC` 请求号，**看不到结构体内容**（`D-031` 后 U4-04c 的闭合手段改为 R49 DDK 源码或反汇编）。
+>
+> **注（2026-11-16 第四轮，第二轮真机采集回传）**：计数再变为 **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**（`D-034`：U4-20/26/27 闭合，U4-11/17/21/23 转 PARTIAL）。**P0 仍 3 且一项未动**。本轮关键结论：**R56 对固件 header 的校验是 `!=` 严格相等，0.3 → 在 header 校验阶段即 `-EINVAL`，早于 entry 解析** → 固件约束不可由 DDK 改造消除（`05/evidence/stage4_round2_20261116/firmware_header.md` §5）。
 
 | 状态 | 数量 | 明细 |
 | --- | ---: | --- |

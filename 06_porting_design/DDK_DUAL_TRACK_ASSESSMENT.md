@@ -178,13 +178,20 @@ static int kbase_api_handshake(struct kbase_file *kfile,
 
 | 事实 | 值 | 等级 |
 | --- | --- | --- |
-| 原厂固件 header | **0.3** | [D·A] 字节实测 |
+| 原厂固件 header | **0.3**（`offset 0x04 = 03`、`0x05 = 00`） | [D·A] 字节实测（2026-11-16 二次复核） |
 | R56 kbase 要求 | **0.4**，`!=` 严格、无 fallback | [E1] `csf/mali_kbase_csf_firmware.c:85-86, 2698-2701` |
+| 失败发生点 | **header 校验阶段**（`:2698`），**早于 entry 解析**（`:2794`）与 `parse_capabilities` | [E1] |
+| 表现 | `dev_err("Firmware header version 0.3 not understood")` → `-EINVAL`；因固件在**首次 `open()`** 加载，**不 bootloop**，`open` 返回错误 | [E1]+[D·B] |
+| 原厂固件自身完整性 | `entry_end_offset = 1000`（≤ 307,200 → 截断检查必过）；首 entry = INTERFACE / 32 B；尾部 4 KiB 无版本串 | [D·A]+[E1] |
 | 结论 | **B1 / B2 两种形态都需要一份 header 0.4、G925 MC12 的 R56 固件** | [E1]+[D·A] |
 
 > **不得假设**"R49 固件可以配 R56 的改造 DDK"。固件由 kbase 加载并校验，kbase 一旦换成 R56，固件就必须是 0.4。**DDK 侧的任何改造都不改变这条**。
 >
 > 也因此："先用 R49 改造 DDK 顶着、以后再解决固件"这个顺序**在技术上不成立**——没有 0.4 固件，R56 kbase 连 `open()` 都过不去，DDK 改造完也无处可跑。**固件必须与 DDK 同时到位，或者先到位。**
+>
+> **2026-11-16 补充**：这条现在是"一行 `!=` 比较"级别的确定结论，不再是"大概率"。
+> 因为 R49 侧的同名校验（`:2771`）**结构完全相同**，只是常量是 `3ul` —— 两侧代码形状一致，说明这不是某种宽松/严格模式的差异，就是硬编码相等。
+> 完整证据链见 [`05_userspace_firmware/evidence/stage4_round2_20261116/firmware_header.md`](../05_userspace_firmware/evidence/stage4_round2_20261116/firmware_header.md) §5。
 
 ### 3.5 R49 改造能触及的边界（详细版见 `R49_DDK_ADAPTATION_PLAN.md`）
 

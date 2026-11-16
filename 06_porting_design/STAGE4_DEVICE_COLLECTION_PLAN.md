@@ -14,7 +14,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 执行次数 | **1 次**（脚本内部分 11 段） |
+| 执行状态 | **已执行 2 轮**：v1.0 **失败**（输出未落盘，见 §9）→ v1.1 **成功**（`SELFCHECK = 668`，见 §10）。**脚本现为 v1.2**（修三处判读缺陷） |
 | 预计耗时 | 1–3 分钟（`readelf -x __versions` 对大文件稍慢） |
 | 需要权限 | **root**（`su`）；只读 |
 | 输出目录 | **`/sdcard/GPU_AUDIT_STAGE4/`**（不可写时回退 `/data/local/tmp/GPU_AUDIT_STAGE4/`） |
@@ -22,7 +22,7 @@
 | 覆盖的 U4 项 | U4-02 / U4-04（部分）/ U4-06 / U4-11 / U4-12（辅证）/ U4-13 / U4-14 / U4-15（部分）/ U4-17（部分）/ U4-20 / U4-21 / U4-23（部分）/ U4-24b / U4-25b / U4-26 / U4-27 |
 | 不覆盖 | U4-10 / U4-22（需故障注入）、U4-12 实体（需商业件）、U4-04c 的 padding 字节（见 §6） |
 
-**一条命令（aShell You，已 root）**：
+**一条命令（aShell You，已 root；以下为首次执行时的记录，保留备查）**：
 
 ```sh
 su -c 'mkdir -p /sdcard/GPU_AUDIT_STAGE4 && cp /sdcard/Download/collect_stage4_remainder.sh /sdcard/GPU_AUDIT_STAGE4/ && sh /sdcard/GPU_AUDIT_STAGE4/collect_stage4_remainder.sh'
@@ -419,7 +419,91 @@ curl -fsSL https://raw.githubusercontent.com/JiangXue5/K80U_GPU_R56_AUDIT/main/0
 
 ---
 
-## 10. 引用
+## 10. 第二轮执行结果评估（2026-11-16 13:13）
+
+> **结论先行**：v1.1 的输出通道修复**完全有效**。`SELFCHECK = 668`（阈值 300），报告 56,138 B / 770 行，每一段都有实质数据。**3 项闭合、4 项推进**，另发现脚本 **3 处判读缺陷**（数据取到了、标签贴错），已修 **v1.2**。
+
+### 10.1 成功指标
+
+| 指标 | 第一轮（v1.0） | 第二轮（v1.1） | 阈值 | 判定 |
+| --- | ---: | ---: | ---: | :---: |
+| 报告大小 | ~3 KB | **56,138 B** | — | ✅ |
+| 总行数 | ~60 | **770** | — | ✅ |
+| `SELFCHECK: 数据行数` | 无此项 | **668** | > 300 | ✅ |
+| 文件 ≡ 终端（`diff`） | ❌ | ✅ 0 行 | 0 | ✅ |
+
+各段数据行数：`A 35 · B 22 · C 93 · D 25 · E 55 · F 47 · G 47 · H 76 · I 8 · J 194 · K 139 · Z 15`。
+
+### 10.2 本轮闭合（3 项）
+
+| 项 | 判据 | 读数 |
+| --- | --- | --- |
+| **U4-20** | SF RenderEngine 后端 | `------------RE GLES (Ganesh)------------` |
+| **U4-26** | 内核 build-id | `0c637c57d1ad6f81f4de95c6dbbc92a8f9153408` |
+| **U4-27** | `/vendor` 是否被 overlay | `erofs ro`，`mountinfo` 无 overlay 条目 |
+
+### 10.3 本轮推进但未闭合（4 项）
+
+| 项 | 拿到了什么 | 还缺什么 |
+| --- | --- | --- |
+| **U4-11** | `entry_end_offset = 1000`；尾部 32 B 全零、尾部 4 KiB 无串 | GLB 实际运行版本（需寄存器/trace） |
+| **U4-17** | 桩的定性：已定义函数只有 `mali_vk_vendor_stub`（24 B） | `api_version` 来源 |
+| **U4-21** | 25 个进程持有 `/dev/mali0` | "硬依赖"等级 |
+| **U4-23** | 两库 `DT_NEEDED` 全表、dynsym 行数 412 / 497 | 导出符号对照 |
+
+### 10.4 脚本 v1.1 的三处**判读**缺陷（已修 v1.2）
+
+数据都取到了，只是标签贴错。**这三处不影响 §10.2/§10.3 的任何结论。**
+
+| # | 缺陷 | 表现 | 根因 | v1.2 修法 |
+| ---: | --- | --- | --- | --- |
+| 1 | `/proc/modules` 列错位 | `taint=0x0000000000000000` | 用 `$6` 当 taint，实际是**加载地址**（`kptr_restrict` 下为 0）。列序 `name size refs deps state address` | 改打 `deps`（第 4 列）；taint 改读 `/proc/sys/kernel/tainted` |
+| 2 | note 偏移错 4 字节 | `build-id: 474e5500c5ea...` | `-j 12` 固定偏移，但 desc 起点是 `12+align4(namesz)=16`；`474e5500` 是 ASCII `"GNU\0"` | 先读 `namesz/descsz` 算偏移，打印 `note hdr` 自证 |
+| 3 | 符号统计正则反序 | `GLOBAL DEFAULT FUNC: 0` | readelf 列序是 `FUNC GLOBAL DEFAULT`，脚本写成 `GLOBAL.*DEFAULT.*FUNC` | 改为 `FUNC.*GLOBAL.*DEFAULT`；新增 `defined (Ndx!=UND)` |
+
+另修两处小问题：`fsize` 改 `stat -Lc` 跟随符号链接（`vulkan.mali.so` 曾显示 `size: 21`）；`E-3` 小节标题由"taint 列"改为"refs / deps / state"。
+
+**验证**（本机）：构造 `namesz=4 descsz=20 name="GNU\0"` 的 note，v1.2 提取 `0c637c57...3408` 正确、v1.1 提取 `474e55000c637c...` 错误；`/bin/ls` 的 `FUNC.*GLOBAL.*DEFAULT` 命中 114、旧正则命中 0；`sh -n`/`bash -n` 通过；空环境冒烟 `EXIT=0`、`diff` 0 行。
+
+### 10.5 要不要重跑全量
+
+**不需要。** 只有第 3 处造成一项实质缺口（U4-23 的导出符号对照），一条命令可补：
+
+```sh
+readelf --dyn-syms -W /vendor/lib64/libgpud.so | awk '$1 ~ /^[0-9]+:/ && $7 != "UND"'
+echo "--- sys ---"
+readelf --dyn-syms -W /system_ext/lib64/libgpud_sys.so | awk '$1 ~ /^[0-9]+:/ && $7 != "UND"'
+```
+
+顺带两条（同样只读、各一行），能把 U4-06 与 U4-24b 也收掉：
+
+```sh
+ls -l /vendor/lib64/egl/; getprop ro.egl.additional_libraries
+readelf -SW /vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko | grep -i cfi
+```
+
+### 10.6 如果还要跑一次全量（v1.2）
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/JiangXue5/K80U_GPU_R56_AUDIT/main/05_userspace_firmware/tools/collect_stage4_remainder.sh -o /data/local/tmp/c.sh && sh /data/local/tmp/c.sh
+```
+
+v1.2 相比 v1.1 的可见变化：`SCRIPT_VERSION` 显示 `v1.2`；D-4 多一行 `note hdr : namesz=4 descsz=20 desc_off=16`；E-3 打印 `deps` 列与 `tainted`；J 段多一节"已定义符号样本（Ndx!=UND）"。
+
+**判断标准不变**：末尾 `SELFCHECK: 数据行数` > 300。
+
+### 10.7 一条方法学收获
+
+第一轮失败与第二轮三处缺陷，都指向同一件事：**"采到了"和"读对了"是两件事**。
+
+- 第一轮：输出没落盘（采到了，但没写下来）；
+- 第二轮：列语义/偏移/正则错（写下来了，但标签错）。
+
+所以本项目的采集脚本必须自带**自证项**：`SELFCHECK` 行数、`note hdr` 回显、`SELFCHECK` 阈值、每段的计数行。没有自证项的采集结果，不应直接进台账。
+
+---
+
+## 11. 引用
 
 | 引用 | 位置 |
 | --- | --- |
