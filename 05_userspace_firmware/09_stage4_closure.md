@@ -316,6 +316,8 @@ copy_to_user(...)
 >
 > **注（2026-11-16 第四轮，第二轮真机采集回传）**：计数再变为 **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**（`D-034`：U4-20/26/27 闭合，U4-11/17/21/23 转 PARTIAL）。**P0 仍 3 且一项未动**。本轮关键结论：**R56 对固件 header 的校验是 `!=` 严格相等，0.3 → 在 header 校验阶段即 `-EINVAL`，早于 entry 解析** → 固件约束不可由 DDK 改造消除（`05/evidence/stage4_round2_20261116/firmware_header.md` §5）。
 
+> **注（2026-11-16 第五轮，第三轮真机采集回传）**：计数再变为 **CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**（`D-035`：U4-22 由 OPEN 转 PARTIAL，依赖面定量闭合、失效表现未观察；其余 25 项状态不变）。**P0 仍 3 且一项未动**。本轮两项判读更正：①`/proc/modules` 的 `deps` 列是**反向依赖（谁在用我）**，`kbase` 是叶子消费者——它向 MTK 侧要 **84** 个符号（49 `ged_*` / 16 `gpufreq_*` / 4 `gpueb_*` / 15 `mtk_*`），而 `ged.ko` 反向 import `kbase` 符号 **0** 条；②U4-26 的答案写直为「**否**」——运行时内核为第三方 GKI 构建（`chandr1000@SukiSU-Ultra-v41181`），该事实 `05/MANIFEST` §1 早已登记，此前台账表述含糊（`D-036`）。`/vendor`、`/vendor_dlkm` 仍原厂 erofs，故固件与 `kbase.ko` 读数有效。
+
 | 状态 | 数量 | 明细 |
 | --- | ---: | --- |
 | ✅ 已闭合 | **5** | U4-01 / U4-03 / U4-05 / U4-08 / U4-09 |

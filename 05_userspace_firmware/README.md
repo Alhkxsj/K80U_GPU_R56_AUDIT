@@ -2,7 +2,7 @@
 
 > **状态：TASK 04 已交付（`efd8547`）+ 真机证据补充核验（`04-fix`）+ 来源审计（`stage4: audit … provenance`）+ P0 补采工具（`65006de`）+ **P0 补采已执行并整合（`stage4: close U4-01 …`）**
 >
-> **三种状态分开记录**：报告 ✅ 已交付；来源归属 ✅ 已澄清（A/B/C 三分）；证据 ⚠️ **未闭环**（27 项：**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**，P0 为 3 且一项未动）。**现行台账见 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)**（2026-11-16 逐项重核，计数由 5/6/1/15 更新，`D-033`）。
+> **三种状态分开记录**：报告 ✅ 已交付；来源归属 ✅ 已澄清（A/B/C 三分）；证据 ⚠️ **未闭环**（27 项：**CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**，P0 为 3 且一项未动）。**现行台账见 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)**（2026-11-16 逐项重核，计数由 5/6/1/15 更新，`D-033`）。
 >
 > **✅ P0 补采已完成（2026-11-15 23:20）**：`tools/collect_stage4_p0.sh` 已在设备端运行，输出 `stage4_p0_20261115_232021.txt` 已回传。
 >

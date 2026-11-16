@@ -37,7 +37,7 @@
 | --- | --- | --- |
 | [`STAGE4_FINAL_REPORT.md`](STAGE4_FINAL_REPORT.md) | Stage 4 全量状态台账：27 项五态分布、P0 明细、风险登记、五项实质推进、验收结论 **B**。**文首已加"时点快照"警告块**，计数为当轮值 5/6/1/15 | 取代 `01_options.md` 中"Stage 4 结论"部分的信息来源；`04_risk_register.md` 的 R-A/R-B 编号在此首次登记 |
 | [`DDK_DUAL_TRACK_ASSESSMENT.md`](DDK_DUAL_TRACK_ASSESSMENT.md) | 用户态 DDK 双路线（**DDK-A = 完整 R56** / **DDK-B = R56 Kbase + R49-derived compatibility DDK**）的机制分析、15 行决策矩阵、推荐结论与 4 条重启条件。**第 2 版**（2026-11-16 路线纠正，`D-030`） | 新增维度，与上表 A–D 策略**正交** |
-| [`STAGE4_REMAINING_AUDIT.md`](STAGE4_REMAINING_AUDIT.md) | **现行台账（第 2 版）**：27 项逐项重核、**7 项新发现（N-1～N-7）**、P0 三项（U4-04 / U4-10 / U4-12）细化、五态 **8/12/1/6**、全量核验表、**10 条**更正留痕 | **取代** `STAGE4_FINAL_REPORT.md` §1 的计数；后者保留为时点快照 |
+| [`STAGE4_REMAINING_AUDIT.md`](STAGE4_REMAINING_AUDIT.md) | **现行台账（第 3 版）**：27 项逐项重核、**10 项发现（N-1～N-10，含 N-8 的表述更正）**、P0 三项（U4-04 / U4-10 / U4-12）细化、五态 **8/13/1/5**、全量核验表、**12 条**更正留痕 | **取代** `STAGE4_FINAL_REPORT.md` §1 的计数；后者保留为时点快照 |
 | [`R49_DDK_ADAPTATION_PLAN.md`](R49_DDK_ADAPTATION_PLAN.md) | R49 深度改造预研框架（**17 节**）：R49 资产清单、UAPI 差异、UK ABI 1.30 vs 1.39、CSF 队列/CSG、GPU properties、内存与 MTK 平台层、G925 MC12 识别、R56 固件适配、GLES/EGL/Vulkan、R56 新特性保留矩阵、须改造源码位置、须重写模块、无法实现项、须商业件项。逐项 **CONFIRMED / LIKELY / UNKNOWN / BLOCKED** | `01_options.md` / `02_scope.md` 的 DDK-B 路线输入；**不改任何源码** |
 | [`STAGE4_DEVICE_COLLECTION_PLAN.md`](STAGE4_DEVICE_COLLECTION_PLAN.md) | 最小真机**只读**采集方案：11 段合并（A 环境～K 属性面）、`/sdcard/GPU_AUDIT_STAGE4/` 统一输出、`NOT_AVAILABLE` 容错、§6 `strace` 能力边界专章、§7 结果转台账规则。配套脚本 `05_userspace_firmware/tools/collect_stage4_remainder.sh` | `05_verification.md` 的前置输入；**仅为准备，未执行** |
 | [`STAGE5_PREREQUISITES.md`](STAGE5_PREREQUISITES.md) | Stage 5A / 5B 的准入清单、4 项硬前置、2 项带条件项、9 条禁止带入的假设 | `01_options.md` / `06_rollback.md` 的前置输入 |

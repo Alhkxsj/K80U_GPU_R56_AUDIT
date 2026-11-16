@@ -423,6 +423,33 @@
 | **状态** | 生效 |
 | **再审议** | ①取得 R56p0 `mali_csffw.bin`（header 0.4）→ U4-12 可重判；②补采 `readelf --dyn-syms` 的 `Ndx!=UND` 符号 → U4-23 可闭合；③若日后发现脚本在其它设备上误判，须复核本条计数 |
 
+### D-035 · 第三轮真机采集判读：计数 **8 / 13 / 1 / 5**；`deps` 列语义纠正；U4-22 转 PARTIAL
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | ①**采纳第三轮真机采集**（`stage4_remainder_20261116_141236.txt`，`SELFCHECK = 632`，脚本 **v1.2**，全程只读），五态由 **8/12/1/6** 更新为 **CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**（总数 27，**P0 仍 3**）。②**`/proc/modules` 的 `deps` 列是反向依赖（谁在用我）**，不得读作"本模块依赖谁"。③**U4-22 由 OPEN 转 PARTIAL**：子项 a（依赖面）定量闭合，子项 b（失效表现）未观察。④`__versions` 全量符号表（`ged` 241 / `kbase` 513）结构化入库。 |
+| **背景** | 用户第三次执行采集脚本并回传 zip。v1.2 的四项修复（`stat -L`、note 动态偏移、`deps` 列语义、readelf 列序）**全部验证有效**——导出符号计数第一次拿到真值（`libgpud` 335、`libgpud_sys` 372、`libged` 100、`vulkan` 1）。 |
+| **`deps` 语义** | 若把 `deps` 读作"我依赖谁"，`ged` 行含 `mali_kbase_mt6991_r49` 就会得出"`ged` 依赖 `kbase`"，与 `__versions` 真值**相反**：`ged.ko` 的 241 条导入中含 `kbase` 的 **0 条**；`kbase` 的 513 条中有 **84 条** MTK 侧符号（49 `ged_*` / 16 `gpufreq_*` / 4 `gpueb_*` / 15 `mtk_*`）。四行自洽（`ged`、`mtk_gpu_pdma`、`mtk_gpufreq_wrapper` 均列 `kbase`；`kbase` 自己的 `deps` 为空）→ **`kbase` 是叶子消费者**。 |
+| **计数变化** | PARTIAL 12→**13**（+U4-22）；OPEN 6→**5**（−U4-22）。CLOSED / BLOCKED 不变。**"未闭合"总数 19 不变**——第四轮只是把一项从"不知道"移到"知道差什么"。 |
+| **为何重要** | ①**方向性错误会连锁污染结论**：`deps` 读反不仅推翻"ged 零 import kbase"，还会让 U4-22 的依赖面判断整个反过来。②`kbase` 的 84 条 MTK 侧导入是**符号级硬依赖**——`ged`/`gpufreq`/`gpueb` 少一个，`kbase` 连装都装不上。这条对 Stage 5 的加载顺序与最小系统设计是硬约束。③再次印证：**采集脚本的"标签"比"数据"更容易错**，自证项（`note hdr` 回显、表头带列语义）必须保留。 |
+| **证据来源** | `05_userspace_firmware/evidence/stage4_round3_20261116/`（`README.md` / `key_readings.md` / `symbols/`）；`06/STAGE4_REMAINING_AUDIT.md` §2 N-8～N-10、§4、§5；`06/STAGE4_DEVICE_COLLECTION_PLAN.md` §11 |
+| **证据等级** | **[D·A]**（设备直读）+ **[E1]**（`__versions` 二进制结构） |
+| **状态** | 生效 |
+| **再审议** | ①全量符号 diff（`readelf --dyn-syms` + `comm`）→ U4-23 可闭合；②故障注入观察 `ged`/`libged` 失效表现 → U4-22 可闭合；③若换设备重采，须复核 `deps` 方向是否仍成立（内核版本差异不改变该语义） |
+
+### D-036 · 设备内核为**第三方重编**（SukiSU），非原厂 CI 产物；U4-26 结论改「否」
+
+| 项 | 内容 |
+| --- | --- |
+| **决策** | ①**确认并显式化**：本设备运行的是第三方重编内核，不是原厂 CI 产物（事实见 `05/MANIFEST` §1，本轮补 [D·A] 直读）。②**U4-26 的问句答案由"是"改为"否"**，状态维持 CLOSED（问句已答）。③**所有设备侧证据必须附带前提**："root + 第三方内核"。④`/vendor`、`/vendor_dlkm` 仍为原厂 `erofs ro`，**被审计的固件与 `kbase.ko` 本体未被替换**，故 §1/§5 的读数有效。 |
+| **背景** | **注意：这不是新事实。** `05/MANIFEST` §1 的"三层内核版本"表（`D-020`）**早已登记**运行时内核为"第三方 GKI 构建（KernelSU 补丁）"。本条做的是**独立复现 + 补齐读数 + 把台账表述写直**。第三轮 `/proc/version` 显示 `Linux version 6.6.143-android15-8-gf9aa2fec23c3-4k (chandr1000@SukiSU-Ultra-v41181) ...`。四条独立证据互相印证：构建者/主机名（SukiSU Ultra，KernelSU 分支）、`SELINUX_CTX u:r:ksu:s0`、`/data/adb/ksu` 与 `/data/adb/modules` 均 `EXISTS`（`/data/adb/susfs` 与 `/sbin/.magisk` 缺失，排除 SUSFS 与 Magisk）、全局 `tainted = 4609 = 0x1201`（bit0 **P** 私有 + bit9 **W** 警告 + bit12 **O** 树外；**无** bit13，即不是 unsigned module）。 |
+| **支持性推论** | 内核虽被重编，原厂 `kbase.ko` 仍能加载（`state=Live`、`refs=91`），且 dmesg 全程 `disagrees about version of symbol` = **0** → 该内核导出符号的 `modversions` CRC 与 `kbase.ko` 的 `__versions` 期望**一致**。这把"H-4 为 0 条"从"无信息的阴性"升级为"加载成功的弱旁证"。**但注意**：环形缓冲可能已滚掉早期日志，故此推论只有弱证据力。 |
+| **为何重要** | ①**证据适用范围**：本轮全部 `[D·A]`/`[D·B]` 来自 root + 第三方内核，**不能等同零售机**。任何 Stage 5 真机实验都必须写明这一点，否则"在真机上验证通过"会被误读为"在用户设备上可用"。②**不推翻 U4-27**：`vendor` 分区未被 overlay，被审计文件是原厂本体——这是本轮证据仍然可用的关键支柱。③**U4-26 是"闭合于否定答案"**：问句答完了，但答案对项目不利，必须显著标注，不能因为"CLOSED 数变多"就当好消息。 |
+| **证据来源** | `05_userspace_firmware/evidence/stage4_round3_20261116/key_readings.md` §0、§3；`06/STAGE4_REMAINING_AUDIT.md` §2 N-8、§6.1、§7 第 11 条 |
+| **证据等级** | **[D·A]**（`/proc/version`、`id -Z`、`/proc/sys/kernel/tainted`、目录存在性） |
+| **状态** | 生效 |
+| **再审议** | 取得原厂内核镜像或其 `build-id` → 可比对差异面；若用户换回原厂内核重采，U4-26 的"否"应复核 |
+
 ### D-028 · DDK 双路线：**DDK-A（R56）为首选**；~~DDK-B（R46）不可推荐~~ → **DDK-B 已于 2026-11-16 改为 R49-derived（见 D-030）**
 
 | 项 | 内容 |
@@ -491,6 +518,8 @@
 | **D-032** | **props：83 共同 + 3 新增；序列化缓冲 749 → 781 B** | **生效** | 编译对拍（本阶段禁止） |
 | **D-033** | **五态登记规则统一；计数 5/8/1/13**（已被 D-034 更新计数） | **生效** | 新证据即可 |
 | **D-034** | **第二轮真机采集判读；计数 8/12/1/6；固件 header 0.3 vs 0.4 阻断锁死；脚本 v1.2** | **生效** | 取得 R56 固件 / 补采导出符号 |
+| **D-035** | **第三轮真机采集判读；计数 8/13/1/5；`deps` 列语义纠正；U4-22 转 PARTIAL** | **生效** | 全量符号 diff / 故障注入 |
+| **D-036** | **设备内核为第三方重编（SukiSU），非原厂 CI 产物；U4-26 答案改「否」** | **生效** | 取得原厂内核与 CI 产物后比对 |
 
 ---
 
@@ -506,3 +535,4 @@
 | 2026-11-16 | **Stage 4 全量收尾轮**：新增 **D-026**（U4-04 拆 a/b/c，**b 闭合**：51 个共同结构体、实质差异 0）、**D-027**（padding 风险由"单点致命"下调为"中"，因 D-026 + UAPI 契约 + 5 处主动清零）、**D-028**（DDK 双路线：A 唯一推荐、B 不可推荐——不解除固件阻断、G925 时间线矛盾、CSG size 落点未知）、**D-029**（五态登记；U4-12 单列 BLOCKED；U4-10 转 PARTIAL——固件在 `open()` 加载不在 probe）。**D-025 保留但加"后续修正"指向 D-026**。共 29 条 |
 | 2026-11-16 | **Stage 4 剩余取证与路线纠偏轮**（TASK-STAGE4-REMAINDER）：<br>①**D-028 的路线部分被取代**——新增 **D-030**：DDK-B 由「R46 DDK」更正为「**R56 Kbase + R49-derived compatibility DDK**」。理由是 R46 的两条缺点（时间线矛盾、CSG 落点未知）**不适用于 R49**：R49 的 `tKRx` features 与 R56 **逐项相同**、CSG 落点已知为 nr 58 / 112 B、且它本就是这台手机在跑的 DDK。R46 内容保留在 `06/DDK_DUAL_TRACK_ASSESSMENT.md` §4 并标记"已被取代"。<br>②新增 **D-031**：**R49 kbase 内联校验 padding（9 处）**，推翻 D-027 的"R49 不校验"前提；U4-04c 的未知面由 15 项收窄为 4 项（`CS_QUEUE_REGISTER` 为剩余致命位），**仍不闭合**。<br>③新增 **D-032**：props 口径更正——**83 共同 + 3 新增**（86/87/88）、序列化缓冲 **749 → 781 B**（+32）；"568/592"仅是 `sizeof(gpu_props_user_data)` 的人工推算。<br>④新增 **D-033**：五态判定规则统一（PARTIAL = 有子项闭 + 有子项开），计数 **5/6/1/15 → 5/8/1/13**（U4-14、U4-15 转 PARTIAL），总数 27、P0 仍 3。<br>**D-027 加"后续修正"指向 D-031**。共 **33 条** |
 | 2026-11-16 | **第二轮真机采集回传轮**（`stage4: ingest round-2 device evidence and fix v1.1 read-out defects`）：用户执行脚本 **v1.1** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 668`，报告 56,138 B / 770 行）。<br>①新增 **D-034**：五态 **5/8/1/13 → 8/12/1/6**（U4-20/26/27 闭合，U4-11/17/21/23 转 PARTIAL），总数 27、**P0 仍 3**。<br>②**固件阻断锁死**：R56p0 要求 header **0.4** 且 `!=` 严格相等（`csf_firmware.c:86`/`:2698`），设备固件实测 **0.3** → 在 header 校验阶段即 `-EINVAL`，早于 entry 解析 → **不可由 DDK 改造消除**，任何「改 header 字节绕过」的方案可直接否决。<br>③**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则顺序）已修 **v1.2** 并本机验证；连带确认「`taint=0`」「`build-id 474e5500…`」「`GLOBAL DEFAULT FUNC: 0`」三项此前读数**均不可引用**。<br>④新增证据目录 `05_userspace_firmware/evidence/stage4_round2_20261116/`。<br>**D-033 的计数被本条更新**（规则不变）。共 **34 条** |
+| 2026-11-16 | **第三轮真机采集回传轮**（`stage4: ingest round-3 device evidence…`）：用户执行脚本 **v1.2** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 632`，报告 58,428 B / 735 行）。<br>①新增 **D-035**：五态 **8/12/1/6 → 8/13/1/5**（U4-22 转 PARTIAL），总数 27、**P0 仍 3**；`deps` 列语义纠正为"反向依赖（谁在用我）"，`kbase` 被确认为叶子消费者（导入 MTK 侧 84 条、`ged` 反向 0 条）；`__versions` 全量符号表（241 / 513 / 84）入库 `evidence/stage4_round3_20261116/symbols/`。<br>②新增 **D-036**：`/proc/version` 显示内核由 `chandr1000@SukiSU-Ultra-v41181` 构建，配合 `u:r:ksu:s0`、`/data/adb/ksu`、`tainted=0x1201` → **设备内核为第三方重编，非原厂 CI 产物**；U4-26 答案由"是"改"**否**"，状态维持 CLOSED；`/vendor`、`/vendor_dlkm` 仍原厂 erofs，被审计文件本体未被替换。<br>③**v1.2 四项修复全部验证有效**：符号链接取目标大小、note 动态偏移（`desc_off=16`）、`deps` 列语义、readelf 列序（导出符号首次拿到真值 335/372/100/1）。<br>④行数 770→735 属**合并与裁剪**，逐段核对无整段丢失。<br>**D-034 的计数被本条更新**（规则不变）。共 **36 条** |

@@ -44,7 +44,7 @@
 | Stage 2 | kbase / CSF 差异审计 | ✅ 完成（7 份，45 条差异 / 13 P0） | ✅ |
 | Stage 3 | MTK 平台层审计 | ✅ 完成（7 份，保留 10 / 适配 2 / 重写 0） | ✅ |
 | Stage 3-REA | 二进制逆向补充 | ✅ 完成（8 份，12 个 `.ko` / 5,440 函数） | ⚠️ 数值基线需按 §5.4 重导 |
-| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份 + `06/` 五份收尾/纠偏台账 + 两轮真机采集证据） | ⚠️ **收尾完成，未闭环**：27 项 = **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**；**P0 3 项（全部未动）** |
+| **Stage 4** | 用户态与固件 ABI | ✅ **已交付**（9 份 + `06/` 五份收尾/纠偏台账 + 三轮真机采集证据） | ⚠️ **收尾完成，未闭环**：27 项 = **CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**；**P0 3 项（全部未动）** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | — |
 
 **"报告已交付"与"证据已闭环"是两种状态，不可互相替代。**
@@ -59,17 +59,19 @@
 | --- | --- |
 | 总数 | **27** |
 | ✅ CLOSED | **8**（U4-01 / U4-03 / U4-05 / U4-08 / U4-09 / **U4-20** / **U4-26** / **U4-27**） |
-| ⚠️ PARTIAL | **12**（U4-04 / U4-06 / U4-07 / U4-10 / **U4-11** / U4-14 / U4-15 / **U4-17** / **U4-21** / **U4-23** / U4-24 / U4-25） |
+| ⚠️ PARTIAL | **13**（U4-04 / U4-06 / U4-07 / U4-10 / **U4-11** / U4-14 / U4-15 / **U4-17** / **U4-21** / **U4-22** / **U4-23** / U4-24 / U4-25） |
 | ⛔ BLOCKED | **1**（**U4-12**） |
-| ○ OPEN | **6**（U4-02 / U4-13 / U4-16 / U4-18 / U4-19 / U4-22） |
+| ○ OPEN | **5**（U4-02 / U4-13 / U4-16 / U4-18 / U4-19） |
 | ? UNKNOWN | **0** |
 | **P0** | **3**（U4-04 / U4-10 / U4-12）—— **一项未动** |
 
-> **本轮变化（2026-11-16 第二轮真机采集，`D-034`）**：**CLOSED 5 → 8**（U4-20 SF 后端 = `RE GLES (Ganesh)`；U4-26 内核 build-id 取得；U4-27 `/vendor` 为 erofs 只读、无 overlay）；**PARTIAL 8 → 12**（U4-11 / U4-17 / U4-21 / U4-23 "主问题已答、细节未答"）；**OPEN 13 → 6**。总数 27、**P0 仍 3**。
+> **本轮变化（2026-11-16 第三轮真机采集，`D-035`）**：**PARTIAL 12 → 13**、**OPEN 6 → 5**（U4-22 由 OPEN 转 PARTIAL：依赖面定量闭合、失效表现未观察）；CLOSED 8 / BLOCKED 1 不变。总数 27、**P0 仍 3**。**未闭合总数 19 不变**——第四轮只是把一项从"不知道"移到"知道差什么"。
 >
-> **三轮趋势**：`5/6/1/15`（第一轮）→ `5/8/1/13`（`D-033` 规则统一）→ **`8/12/1/6`**（`D-034` 采集回传）。
+> **四轮趋势**：`5/6/1/15`（第一轮）→ `5/8/1/13`（`D-033` 规则统一）→ `8/12/1/6`（`D-034` 第二轮采集）→ **`8/13/1/5`**（`D-035` 第三轮采集）。
 >
 > **必须记住的一条**：闭合的三项**全在 P2**，**P0 / P1 无一闭合**。这不是采集做得不够，而是 P0/P1 缺的是**行为**（padding 字节、故障表现、商业固件）与**调用面**（`strace`），只读采集拿不到。静态事实恰好把 P2 清完了。
+>
+> **第三条必须记住的（`D-036`）**：设备跑的是**第三方重编内核**（`chandr1000@SukiSU-Ultra-v41181` / `u:r:ksu:s0` / `tainted=0x1201`），**不是原厂 CI 产物**。**这不是新事实**——§1 三层内核表（`D-020`）早有登记；本轮补 [D·A] 直读，并把 U4-26 的答案由"设备侧已取、比对未做"写直为"**否**"。用户态 `/vendor`、`/vendor_dlkm` 仍是原厂 erofs，故固件与 `kbase.ko` 的读数有效；但任何"在真机上验证通过"的结论，都必须写明这一前提。
 
 ### 3.2 P0 明细
 
@@ -84,11 +86,11 @@
 
 | ID | 内容 | 优先级 | 现有证据 |
 | --- | --- | --- | --- |
-| U4-24 | 设备侧 GPU `.ko` 的**路径 / 文件大小 / SHA256 / vermagic / srcversion**（a）／**`__ksymtab` CRC 与 kCFI 常量**（b） | **P1** | **a ✅ 已闭合**（18 个文件，`05/07` §3.5）；**b 的 CRC 一半已取**：kbase **513** 条 / ged **241** 条 import 符号 + CRC32（`05/evidence/stage4_round1_20261116/`），其中 **84 条为 MTK 侧符号**；**kCFI 类型哈希未采** → 仍 PARTIAL |
+| U4-24 | 设备侧 GPU `.ko` 的**路径 / 文件大小 / SHA256 / vermagic / srcversion**（a）／**`__ksymtab` CRC 与 kCFI 常量**（b） | **P1** | **a ✅ 已闭合**（18 个文件，`05/07` §3.5）；**b 的 CRC 已全量**：kbase **513** / ged **241** 条 import 符号 + CRC32 已结构化落盘（`05/evidence/stage4_round3_20261116/symbols/`），其中 **84 条为 MTK 侧符号**；两模块 `sha256` 与 `__versions` dump `sha256` 均已取；**kCFI 类型哈希未采** → 仍 PARTIAL |
 | **U4-14** | DDK 是否使用 R56 已删除的 ioctl | **P1** | ⚠️ **PARTIAL（本轮）**：子项 a ✅ 删除清单**独立复现**（生产 ioctl **54 → 50**，删 6 增 2）；**ioctl 55 在 CSF 硬件上本就是 no-op**（`limited_core_mask` 只被 JM 后端读）；**ioctl 80 在 OEM 构建里已启用**（`strings` 命中 `Internal fence wait`）。子项 b（DDK 是否调用）仍 OPEN |
 | U4-15 | DDK 对 props 新增 ID 的处理 | **P1** | ⚠️ **PARTIAL（本轮）**：子项 a ✅ **83 共同 + 3 新增**（`RAW_BASE_PRESENT`/`RAW_NEURAL_PRESENT`/`NUM_ACTIVE_GRANULARITY`），序列化缓冲 **749 → 781 B（+32）**，线上格式为 TLV（`D-032`）；子项 b（DDK 是否 `size=0` 探测）仍 OPEN |
 | U4-25 | 第三方内核与原厂 boot 的运行时差异范围（含 `check_version` 是否也被绕过） | **P1** | **25a ✅ 闭合**：vermagic 串不符是 `CONFIG_MODVERSIONS` 的原生语义（`same_magic` 忽略 release 串），**不存在也不需要**绕过 **[E1]**；**25b 开放**：真正的开关是 `bypass-kernel` 改 `bad_version`，默认关闭、2026-08-29→10-30 门控恒失效，且该补丁在 CRC 匹配时无行为差异 → **运行态不可观测**；25c 未测 |
-| U4-26 | 设备当前 boot 是否即所链接 CI run 的产物 | P2 | ✅ **已闭合（设备侧）**：**内核 `build-id = 0c637c57d1ad6f81f4de95c6dbbc92a8f9153408`**（`/sys/kernel/notes` 直读 20 B，2026-11-16）。此前判据已更换为 build-id（`uname -v` 的日期是 `os_patch_level` 派生常量，零信息量）。**与 CI 产物的一元比对未做**，属额外确认 |
+| U4-26 | 设备当前 boot 是否即所链接 CI run 的产物 | P2 | ✅ **已闭合（答案：否）**：内核 `build-id = 0c637c57d1ad6f81f4de95c6dbbc92a8f9153408`（两轮逐字节一致）；**但 `/proc/version` 显示构建者 `chandr1000@SukiSU-Ultra-v41181`**，配合 `u:r:ksu:s0`、`/data/adb/ksu`、`tainted=0x1201`（P+W+O）→ **内核为第三方重编，非原厂 CI 产物**；`/vendor`/`/vendor_dlkm` 仍原厂 erofs（`D-036`） |
 | U4-27 | `/vendor` 当前视图是否被 KSU/NoMount overlay 覆盖 | P2 | ✅ **已闭合**：`/vendor` = `erofs /dev/block/dm-13 ro`、`/vendor_dlkm` = `erofs dm-18 ro`，`mountinfo` 中**两者均无 overlay 条目**；overlay 仅覆盖 `/product`、`/system`、`/system_ext` 的子路径，`lowerdir` 指向 `mi_ext`/`mi_product`（2026-11-16）→ **本轮全部字节证据取自原厂只读镜像** |
 
 > 优先级分布（27 = 3 P0 + 8 P1 + 8 P2 + 3 P3 + 5 原闭合）：**未闭合 19 + 已闭合 8**。
@@ -297,3 +299,4 @@
 | 2026-11-16 | **Stage 4 剩余取证与路线纠偏**（`stage4: correct DDK route to R49-derived and re-audit remaining items`）：新增 `06/STAGE4_REMAINING_AUDIT.md`（27 项逐项重核 + 7 条更正留痕）、`06/R49_DDK_ADAPTATION_PLAN.md`（**17 节**预研框架 §0–§17，逐项 CONFIRMED/LIKELY/UNKNOWN/BLOCKED）、`06/STAGE4_DEVICE_COLLECTION_PLAN.md`（11 段合并只读采集方案）、`05/tools/collect_stage4_remainder.sh`（464 行，`NOT_AVAILABLE` 容错）。`06/DDK_DUAL_TRACK_ASSESSMENT.md` **重写第 2 版**：DDK-B 由 **R46** 更正为 **R49-derived compatibility DDK**（R46 移入 §4 留痕）。**五条实质发现**：①**R49 kbase 内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111，是 R56 检查范围的超集）→ U4-04c 未知面 **15 → 4**；②props 实为 **83 共同 + 3 新增**、序列化缓冲 **749 → 781 B**；③ioctl 集合 **54 → 50**，且 **ioctl 55 在 CSF 上是 no-op**；④**R49 已完整支持 `tKRx`**（features 与 R56 逐项相同，issues 差 3 项且全在 kbase 侧）；⑤OEM 构建**已启用** `CONFIG_MALI_MTK_FENCE_DEBUG`（`strings` 证据）。**计数 5/6/1/15 → 5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；新增 **D-030～D-033**，D-028 路线部分被取代 |
 | 2026-11-16 | **第一轮真机采集回传 + 脚本修复**（`stage4: fix collector output channel and ingest round-1 device evidence`）：用户执行 `collect_stage4_remainder.sh` **v1.0** 并回传 `GPU_AUDIT_STAGE4.zip`。①**发现脚本输出缺陷**：`say()` 落盘但 43 处原始命令管道只写 stdout → 回传文件只有计数层；**v1.1** 改为 `main 2>&1 | tee -a` 单通道，本机 `diff` 验证 0 行差，新增 `SELFCHECK`。②**新增证据目录** `05/evidence/stage4_round1_20261116/`：kbase **513** 条 / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号 → DDK-B 的接口面首次量化到符号级。③**三条实测结论**：GPU = `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在**设备构建**上确证为开（`Internal fence wait`=1）→ U4-14 可行性子项由 [E1] 升 [D·A]；`ged.ko` 零 import kbase 符号（Stage 3 定理实测复核）。④**计数不变 27/5/8/1/13**；U4-24b 仅闭 CRC 一半（kCFI 未采）。需重跑 v1.1 补 B/D/H/J/K/C 六段 |
 | 2026-11-16 | **第二轮真机采集回传**（`stage4: ingest round-2 device evidence and fix v1.1 read-out defects`）：用户执行脚本 **v1.1** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 668`，报告 56,138 B / 770 行，文件与终端 `diff` 0 行）。①**3 项闭合**：**U4-20**（SF 后端 = `------------RE GLES (Ganesh)------------`）、**U4-26**（内核 build-id `0c637c57…`）、**U4-27**（`/vendor`/`/vendor_dlkm` 为 erofs 只读、无 overlay）。②**4 项推进**：**U4-11**（`entry_end_offset = 1000`，首 entry INTERFACE/32 B 自洽，截断检查必过）、**U4-17**（`vulkan.mali.so` 已定义函数只有 `mali_vk_vendor_stub` **24 B** → 是桩不是实现）、**U4-21**（25 进程持有 `/dev/mali0`）、**U4-23**（两库 `DT_NEEDED` 全表）。③**阻断锁死**：R56p0 要求固件 header `(0,4)` 且 `!=` 严格相等（`csf_firmware.c:86`/`:2698`），设备实测 `0.3` → **header 校验阶段即 `-EINVAL`，早于 entry 解析** → 固件约束**不可由 DDK 改造消除**。④**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则顺序）已修 **v1.2** 并本机验证；连带作废三项旧读数（`taint=0`、`build-id 474e5500…`、`GLOBAL DEFAULT FUNC: 0`）。⑤新增证据目录 `05_userspace_firmware/evidence/stage4_round2_20261116/`（3 份文本，无二进制）。**计数 5/8/1/13 → 8/12/1/6**（`D-034`），总数 27、**P0 仍 3 且一项未动**；**三项 Stage 5 准入判定全部不变** |
+| 2026-11-16 | **第三轮真机采集回传**（`stage4: ingest round-3 device evidence and settle environment provenance`）：用户执行脚本 **v1.2** 并回传 `GPU_AUDIT_STAGE4.zip`（`SELFCHECK = 632`，报告 58,428 B / 735 行）。①**v1.2 四项判读修复全部验证有效**：符号链接取目标大小、note 动态偏移（`desc_off=16`）、`deps` 列语义、readelf 列序（导出符号首次拿到真值：`libgpud` 335 / `libgpud_sys` 372 / `libged` 100 / `vulkan` 1）。②**环境定性（`D-036`）**：`/proc/version` 构建者 `chandr1000@SukiSU-Ultra-v41181`，配合 `u:r:ksu:s0`、`/data/adb/ksu`、`tainted=0x1201` → **设备内核为第三方重编，非原厂 CI 产物**；U4-26 答案由"是"改"**否**"，状态维持 CLOSED；`/vendor`/`/vendor_dlkm` 仍原厂 erofs，被审计文件本体未被替换。③**`deps` 语义纠正（`D-035`）**：该列是**反向依赖（谁在用我）**；`ged.ko` 导入 `kbase` 符号 **0** 条，`kbase` 导入 MTK 侧 **84** 条（49 `ged_*`）→ `kbase` 是叶子消费者，U4-22 转 PARTIAL。④`__versions` 全量符号表（241 / 513 / 84）入库 `05_userspace_firmware/evidence/stage4_round3_20261116/symbols/`。⑤行数 770→735 属合并裁剪，逐段核对**无整段丢失**。**计数 8/12/1/6 → 8/13/1/5**（`D-035`），总数 27、**P0 仍 3 且一项未动**；**三项 Stage 5 准入判定全部不变** |

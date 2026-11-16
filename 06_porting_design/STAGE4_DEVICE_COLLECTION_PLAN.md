@@ -503,16 +503,68 @@ v1.2 相比 v1.1 的可见变化：`SCRIPT_VERSION` 显示 `v1.2`；D-4 多一�
 
 ---
 
-## 11. 引用
+## 11. 第三轮执行结果评估（2026-11-16 14:12，脚本 v1.2）
+
+> 原始报告 `stage4_remainder_20261116_141236.txt`，58,428 B / 735 行，`SELFCHECK = 632`。
+> 判读见 [`05_userspace_firmware/evidence/stage4_round3_20261116/`](../05_userspace_firmware/evidence/stage4_round3_20261116/README.md)。
+
+### 11.1 v1.2 四处修复**逐项验证有效**
+
+这一轮的首要目的不是拿新数据，而是确认 v1.2 把"标签贴错"改对了。四项全部能在输出里直接看到差别：
+
+| # | 验证点 | 输出里的样子 |
+| ---: | --- | --- |
+| 1 | 符号链接取目标大小 | `symlink -> mt6991/vulkan.mali.so（以下按目标文件读取）`，`size : 133416` |
+| 2 | note 动态偏移 | `note hdr : namesz=4 descsz=20 desc_off=16`，`build-id : c5eac1f08ba...`（20 B） |
+| 3 | `deps` 列语义 | 表头 `refs / deps / state`，`tainted（全局）= 4609` 单列 |
+| 4 | readelf 列序 | `GLOBAL DEFAULT FUNC: 3`、`defined (Ndx!=UND) : 1`（上一轮恒为 0） |
+
+### 11.2 行数下降是合并，不是丢数据
+
+`SELFCHECK` 由 668 降到 632（−36）。逐段对比：A/B/C/F/G/H/I 段**一行不差**；E 段 −12（删掉"taint 二次过滤"整段）、J 段 −23（符号样本 20→15 × 4 库）、K 段 −2（holders 25→23）、D/Z 段 +1。**每一条减少都有归属**。
+
+> 判读规则：**某段整段变成 0 行**才是真丢数据；段落内部行数随样本裁剪变化属正常。
+
+### 11.3 本轮真正的产出：环境定性
+
+| 事实 | 读数 | 影响 |
+| --- | --- | --- |
+| 内核构建者 | `chandr1000@SukiSU-Ultra-v41181` | 设备内核为**第三方重编**，非原厂 CI 产物 |
+| SELinux / root | `u:r:ksu:s0`、`/data/adb/ksu` `EXISTS` | KSU 已启用 |
+| 全局 taint | `4609` = `0x1201`（P + W + O） | 私有 + 树外模块；**非** unsigned |
+| `/vendor` / `/vendor_dlkm` | `erofs ro`，无 overlay | **固件与 `kbase.ko` 本体未被替换**，采集结论仍有效 |
+
+这条不定性任何 U4 项的"技术"状态，但**必须写在任何 Stage 5 设计的前置声明里**：本设备的可观测面来自 root + 第三方内核，不能等同零售机。
+
+### 11.4 一条方向性错误的纠正
+
+上一版把 `/proc/modules` 的 `deps` 列读作"本模块依赖谁"，会得出"`ged` 依赖 `kbase`"，与 `__versions` 真值相反（`ged` 导入 `kbase` 符号 **0** 条；`kbase` 导入 MTK 侧 **84** 条）。正确读法是**反向依赖（谁在用我）**，四行自洽。详见审计文档 §2 N-9。
+
+### 11.5 下一轮是否还跑
+
+**不建议再跑全量。** 剩余 18 项未闭合里，只有 3 项（U4-06 / U4-23 / U4-24）能靠"一条只读命令"推进，其余分别需要 `strace`（5）、REA（3）、商业件（3）、故障注入（3）、运行时寄存器（2）。为这 3 项再跑 523 行脚本不划算，**直接给三条命令**即可：
+
+```sh
+ls -l /vendor/lib64/egl/ ; getprop ro.egl.additional_libraries
+readelf --dyn-syms -W /vendor/lib64/libgpud.so      | awk '$7!="UND"{print $8}' | sort > /data/local/tmp/gpud.txt
+readelf --dyn-syms -W /system_ext/lib64/libgpud_sys.so | awk '$7!="UND"{print $8}' | sort > /data/local/tmp/gpud_sys.txt
+comm -23 /data/local/tmp/gpud.txt /data/local/tmp/gpud_sys.txt   # 只在 gpud 里的
+readelf -x __kcfi_typeid_ /vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko
+```
+
+---
+
+## 12. 引用
 
 | 引用 | 位置 |
 | --- | --- |
-| 脚本本体 | `05_userspace_firmware/tools/collect_stage4_remainder.sh` |
+| 脚本本体 | `05_userspace_firmware/tools/collect_stage4_remainder.sh`（v1.2） |
 | 固件 header 字段定义 | `05_userspace_firmware/02_csf_firmware_abi.md` §2 |
 | `gpuinfo` 输出格式 | `01_original_baseline/…/mali-r49p1/…/mali_kbase_core_linux.c:3652`（`DEVICE_ATTR_RO(gpuinfo)`）、`02_r56_source/…/mali_kbase_core_linux.c:2671` |
 | `__versions` 语义 | `D-019`、`D-022`、`05/08` §3.6.5 |
 | `disagrees about version of symbol` 判据 | `06/STAGE4_FINAL_REPORT.md` §4.5 |
 | MTK 扩展串所在源码 | `01_original_baseline/…/mali_kbase_core_linux.c:1830-1880` |
-| 已完成的五份采集 | `05/07` §1 |
+| 已完成的六份采集 | `05/07` §1 |
+| 第三轮证据 | `05/evidence/stage4_round3_20261116/`（含 `symbols/` 全量符号表） |
 
 *本文件与配套脚本不含任何写系统分区的操作；未编译、未刷机、未部署。*

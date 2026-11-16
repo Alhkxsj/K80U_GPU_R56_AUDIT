@@ -152,7 +152,7 @@
 | `08` | ✅ | — | 来源审计：分类与判定，不新增 ABI 结论；§3.6 为 U4-24 的判定矩阵；**§3.7.4 已于 v1.7 改写** |
 | **`09`** | ✅ | — | **新增**：Stage 4 收尾核验（四处更正 + 阻断清单 + 最终裁定 B） |
 
-> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**（五态，见 §6.1；**2026-11-16 第二轮采集后由 5/8/1/13 更新，`D-034`**），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
+> **不要把"六份报告已提交"读成"Stage 4 已闭环"。** 交付状态是文档维度的，闭环状态是证据维度的；当前 27 项中 **CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**（五态，见 §6.1；**2026-11-16 第三轮采集后由 8/12/1/6 更新，`D-035`**），P0 为 3 项（U4-04 / U4-10 / U4-12，其中 U4-12 为**阻断**）。**同样不要把"证据已实测"读成"原厂环境实测"**，见 §3.3。
 
 ### 3.3 来源归属状态（A / B / C）
 
@@ -397,9 +397,28 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 ---
 
+## 5.4 证据目录：`evidence/stage4_round3_20261116/`
+
+> 第三轮真机采集的**判读结果**（2026-11-16 14:12，脚本 v1.2，`SELFCHECK = 632`）。只含文本，**不含任何二进制**。
+
+| 文件 | 内容 |
+| --- | --- |
+| `README.md` | v1.2 四项修复验证、行数下降归属、三项新发现（环境定性 / `deps` 方向 / 双渲染路径）、台账影响、边界声明 |
+| `key_readings.md` | 十三组关键读数与判读、四条**不采用**数据的理由 |
+| `symbols/ged_versions.tsv` | ged.ko `__versions` **241** 条（`symbol` / `crc32` / `crc_hex`） |
+| `symbols/kbase_versions.tsv` | kbase `__versions` **513** 条 |
+| `symbols/kbase_mtk_side.tsv` | kbase 中 MTK 侧 **84** 条（49 `ged_` / 16 `gpufreq_` / 4 `gpueb_` / 15 `mtk_`），带分类 |
+| `symbols/README.md` | 记录结构与解析方法（含 hexdump 跨行截断、字节序两个陷阱）、复现命令、五项校验点 |
+
+原始报告 `stage4_remainder_20261116_141236.txt`（58,428 B）与 `F_*_versions.txt`（135 KB / 63 KB）**未入库**，按需重新生成。
+
+**使用边界**：①CRC 数值只对**本机这次构建**有效，**不得**复制到其它设备或其它构建（`AGENTS.md` 禁止表述 ⑤）；②该设备为 **root + 第三方内核**（`D-036`），读数不等同零售机；③`kCFI` 类型哈希**仍未采集**。
+
+---
+
 ## 6. 未决项
 
-### 6.1 UNKNOWN 汇总（27 项：**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**）
+### 6.1 UNKNOWN 汇总（27 项：**CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**）
 
 > 本节为 `05` 视角的摘要；**现行权威台账**为 [`../06_porting_design/STAGE4_REMAINING_AUDIT.md`](../06_porting_design/STAGE4_REMAINING_AUDIT.md)。
 
@@ -497,3 +516,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-16 | **v1.9** | **Stage 4 剩余取证与 DDK 路线纠偏（TASK-STAGE4-REMAINDER）**：新增 `tools/collect_stage4_remainder.sh`（464 行，11 段合并只读采集，`NOT_AVAILABLE` 容错，**未执行**）。本目录四处口径更正：①**U4-04c 未知面由 15 项收窄到 4 项**——R49 kbase **内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111），是 R56 所查 `padding[62]` 的**真子集**（`D-031`）；②**props 实为 83 项共同 + 3 项新增**、序列化缓冲 **749 → 781 B**；「568/592」仅 `sizeof` 人工推算（`D-032`）；③**ioctl 54 → 50**（删 6 增 2），**ioctl 55 在 CSF 上本为 no-op**（唯一消费者是 JM 后端）；④**R49 已完整支持 `tKRx`**，`features` 与 R56 逐项相同。**计数 27/5/6/1/15 → 27/5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；P0 仍 3 |
 | 2026-11-16 | **v2.0** | **第一轮真机采集回传 + 脚本 v1.1**：用户执行脚本 v1.0 并回传 `GPU_AUDIT_STAGE4.zip`。①**发现并修复 v1.0 的输出缺陷**：`say()` 写文件、但 43 处原始命令管道只写 stdout → 回传文件只有计数层、无字节/行级内容；v1.1 改为单通道 `tee`，本机验证文件与终端 `diff` 为 0 行。②**可用的部分并入证据**：新增 `evidence/stage4_round1_20261116/`（kbase **513** 条 / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号）。③**三条实测结论**：GPU = `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在**设备构建上确证为开**（`Internal fence wait`=1）→ U4-14 的可行性子项升级为 [D·A]；`ged.ko` 不 import 任何 kbase 符号（Stage 3 定理实测复核）。④**计数不变 27/5/8/1/13**（U4-24b 只闭了 CRC 一半，kCFI 未采）。细目见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` §9 |
 | 2026-11-16 | **v2.1** | **第二轮真机采集回传 + 脚本 v1.2**：用户执行脚本 **v1.1** 并回传（`SELFCHECK = 668`，报告 56,138 B / 770 行，文件与终端 `diff` 0 行）。①**新增证据目录** `evidence/stage4_round2_20261116/`（3 份文本）：固件 header 逐字段 + entry 首项解码、十二组关键读数、脚本缺陷说明。②**3 项闭合**：U4-20（`RE GLES (Ganesh)`）、U4-26（内核 build-id）、U4-27（`/vendor` 无 overlay）。③**4 项推进**：U4-11（`entry_end_offset = 1000`）、U4-17（Vulkan 是 24 B 的桩）、U4-21（25 holders）、U4-23（`DT_NEEDED` 全表）。④**脚本三处判读缺陷**（`/proc/modules` 列语义、note 偏移、readelf 正则）已修 **v1.2**；连带作废 `taint=0`、`build-id 474e5500…`、`GLOBAL DEFAULT FUNC: 0` 三项旧读数。**计数 27/5/8/1/13 → 27/8/12/1/6**（`D-034`）；P0 仍 3 且一项未动 |
+| 2026-11-16 | **v2.2** | **第三轮真机采集回传 + 符号表结构化**：用户执行脚本 **v1.2** 并回传（`SELFCHECK = 632`，报告 58,428 B / 735 行）。①**新增证据目录** `evidence/stage4_round3_20261116/`：`README.md`、`key_readings.md`、`symbols/`（241 / 513 / 84 三张 TSV + 解析说明）。②**v1.2 四项修复全部验证有效**，导出符号首次拿到真值（`libgpud` 335 / `libgpud_sys` 372 / `libged` 100 / `vulkan` 1）。③**环境定性**（`D-036`）：设备内核为第三方重编（`chandr1000@SukiSU-Ultra-v41181`），U4-26 答案改为「否」；`/vendor` 仍原厂 erofs。④**`deps` 语义纠正**（`D-035`）：该列是反向依赖，`kbase` 为叶子消费者（导入 MTK 侧 84 条、`ged` 反向 0 条），U4-22 转 PARTIAL。**计数 27/8/12/1/6 → 27/8/13/1/5**；P0 仍 3 且一项未动 |

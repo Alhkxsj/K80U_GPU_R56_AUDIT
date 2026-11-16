@@ -13,7 +13,7 @@
 | 顺序 | 文件 | 作用 | 何时必读 |
 | ---: | --- | --- | --- |
 | 1 | [`AGENTS.md`](AGENTS.md) | **强制执行规范**：上下文恢复、Git 检查、证据等级、15 类禁止表述、仓库红线、交付格式 | **每次任务开始** |
-| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项五态台账（**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
+| 2 | [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) | **项目当前状态**：阶段进度、Stage 4 的 27 项五态台账（**CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**）、P0 明细、设备事实、技术债、任务队列、Stage 5 准入判定 | **每次任务开始** |
 | 3 | [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) | **已形成的决策**：D-001 … D-033，含状态与再审议条件 | 涉及判断"能不能做/能不能改"时 |
 | 4 | 本文件 §1–§7 | 审计标的、阶段路线图、关键问题闭环情况 | 需要全景时 |
 | 5 | 目标目录的 `README.md` + `MANIFEST.md` | 该目录职责、文件清单、证据登记、修订记录 | 进入某目录前 |
@@ -58,7 +58,7 @@
 | Stage 2 | R56p0 落盘 + kbase/CSF 差异审计 | ✅ 完成 | `03_kbase_csf/` 7 份产物，45 条差异（13 P0） |
 | Stage 3 | MTK 平台层差异比对 | ✅ 完成 | `04_mtk_platform/` 7 份产物（保留 10 / 适配 2 / 重写 0） |
 | Stage 3-REA | 二进制逆向补充审计（REA + Ghidra） | ✅ 完成 | `04_mtk_platform/REA_SUPPLEMENT.md` 等 8 份；12 个 `.ko` / 5,440 函数 |
-| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，全量收尾完成，证据未闭环** | `05_userspace_firmware/` 9 份（`01`–`09`）+ `06_porting_design/` **六份**收尾台账 + **两轮真机采集证据**；**27 项：CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6** |
+| Stage 4 | 用户态与固件 ABI 核对 | 🔄 **报告已交付，全量收尾完成，证据未闭环** | `05_userspace_firmware/` 9 份（`01`–`09`）+ `06_porting_design/` **六份**收尾台账 + **三轮真机采集证据**；**27 项：CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5** |
 | Stage 5 | 方案设计与可行性结论 | ⏳ 未开始 | `06_porting_design/`、`final_report/` 仅目录骨架 |
 
 > **Stage 4 的两种状态必须分开读**
@@ -67,7 +67,7 @@
 > | --- | --- | --- |
 > | **报告交付** | ✅ 完成 | 首轮 6 份（`efd8547`）+ 真机证据整合（`04-fix`，第 7 份）+ 来源审计（`stage4: audit … provenance`，第 8 份） |
 > | **来源归属** | ✅ 完成 | A/B/C 三分：厂商文件 / 第三方内核运行时 / 厂商模块（`05/08`） |
-> | **证据闭环** | ⚠️ **未闭环** | 27 项：**CLOSED 8 / PARTIAL 12 / BLOCKED 1 / OPEN 6**；**P0 仍 3 项且一项未动**（U4-04 / U4-10 / U4-12）。台账见 [`06/STAGE4_REMAINING_AUDIT.md`](06_porting_design/STAGE4_REMAINING_AUDIT.md)（现行）与 [`06/STAGE4_FINAL_REPORT.md`](06_porting_design/STAGE4_FINAL_REPORT.md)（时点快照） |
+> | **证据闭环** | ⚠️ **未闭环** | 27 项：**CLOSED 8 / PARTIAL 13 / BLOCKED 1 / OPEN 5**；**P0 仍 3 项且一项未动**（U4-04 / U4-10 / U4-12）。台账见 [`06/STAGE4_REMAINING_AUDIT.md`](06_porting_design/STAGE4_REMAINING_AUDIT.md)（现行）与 [`06/STAGE4_FINAL_REPORT.md`](06_porting_design/STAGE4_FINAL_REPORT.md)（时点快照） |
 >
 > **已完成（证据支持）**
 > - UAPI 契约逐字段比对：ioctl 逐字相同（R49 **54** → R56 **50**，删 6 增 2）、结构体 30/30 兼容、GPU 属性 **83 项共同 + 3 项新增**（`RAW_BASE_PRESENT` / `RAW_NEURAL_PRESENT` / `NUM_ACTIVE_GRANULARITY`）、能力表为 ≤1.30 保留旧语义
@@ -165,7 +165,7 @@ R56p0 源码落盘并完成五域差异审计，产物见 [`03_kbase_csf/`](03_k
 | Stage 1 | 参考资料与基线采集（版本、配置、ABI 快照） | `00` `01` | ✅ 完成（两条基线均在手） |
 | Stage 2 | R56p0 源码落盘、结构测绘与 kbase/CSF 差异审计 | `02` `03` | ✅ 完成 |
 | Stage 3 | MTK 平台层差异比对 | `04` | ✅ 完成（+ Stage 3-REA 二进制补充审计） |
-| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 全量收尾完成 / 两轮真机采集已并入**（27 项五态：**8 / 12 / 1 / 6**；P0 3 项且一项未动，其中 U4-12 为 BLOCKED） |
+| Stage 4 | 用户态与固件 ABI 核对 | `05` | 🔄 **报告已交付 / 来源已归属 / 全量收尾完成 / 三轮真机采集已并入**（27 项五态：**8 / 13 / 1 / 5**；P0 3 项且一项未动，其中 U4-12 为 BLOCKED） |
 | Stage 5 | 方案设计与可行性结论 | `06` `final_report` | ⏳ 未开始（前置条件：U4-04c / U4-12 / U4-24；**可设计、不可定论**） |
 
 ---
