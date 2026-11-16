@@ -141,11 +141,30 @@ $ strings -a … | grep -c ged_mali_event_notify_fence_timeout_event
 
 | 边界 | 说明 |
 | --- | --- |
-| 这是**仓库基线** kbase（OS3.0.305.0，`g57e634f35c1b`） | 设备 kbase 是 OS4.0.3.0（`g54a15cf3acba`），**未直接验证**；device `.ko` 未入库（`D-004`） |
-| 但它把"OEM 是否启用该 MTK 扩展"从 [U] 推到 **[E1]（同源码、不同构建）** | 同 release 串 `r49p1-03bet0`，`mali_*` 三个模块中只有 kbase 有实质差异（`+17,640 B`） |
-| **可一条只读命令在设备上复核** | `strings /vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko \| grep -c "Internal fence wait"`，见 `STAGE4_DEVICE_COLLECTION_PLAN.md` §5 G 段 |
+| ~~这是**仓库基线** kbase，设备构建**未直接验证**~~ | ✅ **2026-11-16 已在设备构建上复核**：`/vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko`（2,328,064 B）上 `Internal fence wait` = **1**、`Internal fence timeouts` = **4**、`ged_mali_event_notify_fence_timeout_event` = **2** → 该结论对**设备构建**同样成立，等级升为 **[D·A]** |
+| 原推理链 | [E1]（同源码、不同构建）→ 现在有 [D·A] 直接背书 | 同 release 串 `r49p1-03bet0`，`mali_*` 三个模块中只有 kbase 有实质差异（`+17,640 B`） |
+| 复核命令 | `strings /vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko \| grep -c "Internal fence wait"`，见 `STAGE4_DEVICE_COLLECTION_PLAN.md` §5 G 段 | 已执行，输出见 `§9.2` |
 
 > **为什么这条重要**：它把 U4-14 的"80 是否可能被调用"变成"80 在 OEM 上确实存在，所以 DDK **有理由**调用它；若 R56 上没有，DDK 会拿到 `-ENOTTY`"。
+
+---
+
+### N-6 · 真机实测：SKU 确证 + import 面量化（2026-11-16）
+
+| # | 事实 | 证据 | 等级 |
+| --- | --- | --- | --- |
+| 1 | GPU 为 **Mali-G925-Immortalis 12 cores r0p1 0x0D080300** | `/sys/class/misc/mali0/device/gpuinfo` 与 `/sys/devices/platform/soc/48000000.mali/gpuinfo` 两路一致 | **[D·A]** |
+| 2 | R49 kbase import **513** 条、ged import **241** 条；其中 **84 条是 MTK 侧符号** | `readelf -x __versions` 全量解析，见 `05/evidence/stage4_round1_20261116/` | **[D·A]** |
+| 3 | `ged.ko` **不** import 任何 `kbase` 符号 | 241 条里搜 `kbase` 为空 | **[D·A]**（Stage 3 "零反向依赖"定理的实测复核） |
+| 4 | `module_layout` CRC 两模块相同 = `0x4e276f37` | 同上 | **[D·A]** |
+
+**意义**：
+
+- 第 2 条给 `R49_DDK_ADAPTATION_PLAN.md` §7 一份**可逐条核对的 84 项接口面**（`ged_*` / `gpufreq_*` / `gpueb_*` / `mtk_*` / `wait_gpueb`），不再是"大致依赖 GED/GPUFreq"的模糊表述。这是 DDK-B 路线**唯一已经量化到符号级**的约束。
+- 第 3 条意味着：换 kbase **不会**打破 ged 的链接，只会在 kbase 侧因缺符号而失败——失败面是**单向**的，便于定位。
+- 第 1 条只确证**硬件 SKU**，**不**确证固件匹配；U4-12 仍是 BLOCKED，不得据此上调。
+
+> **边界**：以上 CRC 数值只对**本机这次构建**有效，**不得**复制到其它设备或其它构建（`AGENTS.md` 禁止表述 ⑤）。
 
 ---
 
@@ -292,7 +311,7 @@ driver/product/kernel/
 | U4-11 | 固件 GLB 尾部版本 / `entry_end_offset` | P1 | ○ OPEN | 前 16 B 已知；`0x030A0000` 是 `version_hash`，**不是** GLB 版本（禁止解码） | `offset 0x10` 起 4 字节、尾部 32 B | `od -An -tx1 -N 24 /vendor/firmware/mali_csffw.bin`；`od -j $((SIZE-32))` | ✅ | ✅ | ❌ | ❌ |
 | **U4-12** | R56 固件是否匹配 G925 MC12 | **P0** | ⛔ BLOCKED | 交付包 23 条目 0 命中；验收判据 6 条已写定（§3.3） | **固件实体** | 不可由设备/源码取得 | ❌ | ❌ | ❌ | ✅ |
 | U4-13 | NX 相关 GLB 字段 | P3 | ○ OPEN | — | 固件实体 | 随 U4-12 | ❌ | ❌ | ⚠️ | ✅ |
-| **U4-14** | DDK 是否用被删的 6 个 ioctl | P1 | ⚠️ **PARTIAL** | 删除清单独立复现（54→50）；**55 在 CSF 上是 no-op**；**80 在 OEM 上存在**（§2 N-3/N-5） | DDK 实际调用面 | `strace -f -e trace=ioctl` 看 `_IOC(_,0x80,nr,size)` 是否出现 8/12/32/35/55/80 | ✅ | ✅ | ❌ | ❌ |
+| **U4-14** | DDK 是否用被删的 6 个 ioctl | P1 | ⚠️ **PARTIAL** | 删除清单独立复现（54→50）；**55 在 CSF 上是 no-op**；**80 在 OEM 上存在**（§2 N-3/N-5）；**实测确证** `CONFIG_MALI_MTK_FENCE_DEBUG` 为开（N-6，`Internal fence wait`=1） | DDK 实际调用面（是否真调） | `strace -f -e trace=ioctl` 看 `_IOC(_,0x80,nr,size)` 是否出现 8/12/32/35/55/80 | ✅ | ✅ | ❌ | ❌ |
 | U4-15 | DDK 对新增 props 的处理 | P1 | ⚠️ **PARTIAL** | **3 个新 ID**、**+32 B**、TLV 机制、唯一硬门槛（§2 N-2） | DDK 是否 `size=0` 探测 | `strace` 看 GET_GPUPROPS 调用次数 | ✅ | ✅ | ❌ | ❌ |
 | U4-16 | DDK 是否依赖 HWCNT 做 DVFS | P2 | ○ OPEN | — | trace | `strace` 看 `KINSTR_PRFCNT_SETUP` | ✅ | ✅ | ❌ | ❌ |
 | U4-17 | Vulkan 薄壳 `api_version` / 加载机制 | P1 | ○ OPEN | 薄壳存在；VINTF 1.3 | 壳内 `api_version` 来源 | `strings vulkan.mali.so \| grep -i vk_icd`；`getprop \| grep vulkan`；完整需反汇编 | ⚠️ | ✅ | ⚠️ | ❌ |
@@ -302,7 +321,7 @@ driver/product/kernel/
 | U4-21 | 是否有服务硬依赖 `/dev/mali0` | P2 | ○ OPEN | — | 服务面 | `dumpsys -l` + `ls -l /proc/*/fd 2>/dev/null \| grep mali` | ✅ | ✅ | ❌ | ❌ |
 | U4-22 | `libged` 失效的降级程度 | P1 | ○ OPEN | HWC/mapper NEEDED `libged`；`ged.ko` 不反向依赖 kbase | 真实失效表现 | 需故障注入或代码级追踪 | ❌ | ✅ | ⚠️ | ❌ |
 | U4-23 | `libgpud` 与 `libgpud_sys` 符号关系 | P3 | ○ OPEN | 两者分别被 GLES / `libvulkan.so` NEEDED | 符号表对照 | `readelf --dyn-syms` 两者并比对（设备端可做） | ✅ | ✅ | ❌ | ❌ |
-| **U4-24** | 设备 `.ko` 身份 / CRC | P1 | ⚠️ PARTIAL | a ✅ 18 个全取 | b：CRC 数值 | `readelf -x __versions` （ged 抽样 + kbase 全量） | ✅ | ✅ | ❌ | ❌ |
+| **U4-24** | 设备 `.ko` 身份 / CRC | P1 | ⚠️ PARTIAL | a ✅ 18 个全取；**b 的 CRC 一半已取**：kbase **513** / ged **241** 条 import 符号 + CRC32，`module_layout`=`0x4e276f37`（两模块相同） | **kCFI 类型哈希**（`__kcfi_typeid_*` 未采） | `readelf -x __cfi*` / `__kcfi_typeid_*` 补采 | ✅ | ✅ | ❌ | ❌ |
 | **U4-25** | 第三方内核差异面 | P1 | ⚠️ PARTIAL | a ✅；b 运行态不可观测（只在 CRC 不匹配时有意义） | c：导出符号集/CFI/调度 | `dmesg \| grep disagrees`；导出符号表需镜像 | ⚠️ | ✅ | ⚠️ | ❌ |
 | U4-26 | 设备 boot 是否即 CI 产物 | P2 | ○ OPEN | 四项参数吻合 [B]+[D·B]；`uname -v` 零信息量 | 内核 `build-id` | `cat /sys/kernel/notes \| od -An -tx1` | ✅ | ✅ | ❌ | ⚠️（需 CI 产物） |
 | U4-27 | `/vendor` 是否被 overlay | P2 | ○ OPEN | 安装包只写 `boot`（[B]），不证明视图原样 | mount 表 | `cat /proc/self/mountinfo \| grep -Ei "vendor\|overlay\|magisk\|KSU"` | ✅ | ✅ | ❌ | ❌ |

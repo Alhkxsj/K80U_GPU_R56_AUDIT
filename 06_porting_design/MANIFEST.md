@@ -38,3 +38,4 @@
 | --- | --- | --- |
 | 2026-11-16 | v1.0 | 首次登记三份 Stage 4 收尾文档；建立编号约定（避免"路线 A/B"二义） |
 | 2026-11-16 | **v1.1** | 补登 **3 份**新文档（`STAGE4_REMAINING_AUDIT.md` / `R49_DDK_ADAPTATION_PLAN.md` / `STAGE4_DEVICE_COLLECTION_PLAN.md`）；`DDK_DUAL_TRACK_ASSESSMENT.md` 升 **v2.0**；编号约定中 **DDK-B 由「R46 DDK」改为「R49-derived compatibility DDK」**（`D-030`），旧定义留痕于本行 |
+| 2026-11-16 | **v1.2** | `STAGE4_DEVICE_COLLECTION_PLAN.md` 追加 **§9 第一轮执行结果评估**（v1.0 输出缺陷、可用项、缺口清单、重跑方式），原 §9 引用顺延为 §10；`STAGE4_REMAINING_AUDIT.md` 追加 **§2 N-6**（SKU 确证 + import 面量化）并更新 N-5 边界表；`R49_DDK_ADAPTATION_PLAN.md` §7 追加 **7.1 84 条 MTK 侧符号**。**计数不变 27/5/8/1/13** |

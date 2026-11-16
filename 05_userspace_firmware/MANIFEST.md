@@ -69,7 +69,7 @@
 | 12 | **`tools/README_stage4_p0.md`** | 234 | 8,547 | `001e85e8e235ad1b` | 手机执行指南（aShell You、三种传脚本方式、判读表、兜底命令）+ **本机执行结果摘要** |
 | 13 | **`tools/collect_gpu_module_identity.sh`** | 399 | 17,967 | `356175c51c874af3` | **新增**：U4-24 模块身份采集（只读、无 adb、工具缺失输出 `NOT_AVAILABLE`、路径多根搜索、压缩/内建降级判定）。**v1.1 修正 `ged$` 正则失效**（`08` §3.7.7） |
 | 14 | **`tools/README_gpu_module_identity.md`** | 199 | 9,217 | `2238d43031af3108` | **新增**：手机执行指南 + 三行核心判读表 + `lsmod` 尺寸口径说明 + 兜底命令 + 失败排查 |
-| 15 | **`tools/collect_stage4_remainder.sh`** | 464 | 见文件 | `git hash-object` | **新增（本轮）**：Stage 4 剩余项合并采集（11 段 A–K，只读、无 adb、无电脑依赖）。输出统一到 `/sdcard/GPU_AUDIT_STAGE4/`（失败回退 `/data/local/tmp/`）；**逐工具 `NOT_AVAILABLE` 容错**、`MODDIR` 三级回退、dmesg 计数 `case` 数字校验。`sh -n` 通过 + 本地冒烟 exit=0。**仅为准备，未在真机执行**；执行说明见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` |
+| 15 | **`tools/collect_stage4_remainder.sh`** | 490 | 21,623 | `git hash-object` | **v1.1（2026-11-16 修复）**：Stage 4 剩余项合并采集（11 段 A–K，只读、无 adb、无电脑依赖）。**v1.0 有输出缺陷**——43 处原始命令管道只写 stdout、不落盘，导致回传文件只有标题；v1.1 改为 `main 2>&1 | tee -a` 单通道，文件内容 ≡ 终端内容（本机 `diff` 验证 0 行差），无 `tee` 时用内置 `tee_a` 回退，并输出 `SELFCHECK: 数据行数` 供自检。输出统一到 `/sdcard/GPU_AUDIT_STAGE4/`（回退 `/data/local/tmp/`）；逐工具 `NOT_AVAILABLE` 容错。执行说明见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` |
 | 15 | `MANIFEST.md` | 本文件 | — | — | — |
 
 > 行数 / 字节 / SHA256 由 §4.10 的自校验命令生成，随文件变更而更新；本节不写死数字，避免"表格与实际不一致"。
@@ -368,6 +368,23 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 
 ---
 
+## 5.1 证据目录：`evidence/stage4_round1_20261116/`
+
+> 2026-11-16 真机采集的**可用部分**。只含符号名与 CRC 数值，**不含任何 `.ko` / `.so` / `.bin` / 固件字节**。
+
+| 文件 | 内容 | 大小 |
+| --- | --- | ---: |
+| `README.md` | 采集背景、v1.0 输出缺陷说明、解析方法、三条可直接引用的事实 | 3,737 B |
+| `kbase_imports.tsv` | `mali_kbase_mt6991_r49.ko` 的 **513** 条 import 符号 + CRC32（TSV：`module / crc32 / symbol`） | 28,349 B |
+| `ged_imports.tsv` | `ged.ko` 的 **241** 条 import 符号 + CRC32 | 9,009 B |
+| `mtk_side_symbols.md` | 上表中筛出的 **84** 条 MTK 侧符号（`ged_*` / `gpufreq_*` / `gpueb_*` / `mtk_*` / `wait_gpueb`） | 4,908 B |
+
+原始 `__versions` 转储**未入库**（63 KB / 135 KB），只登记 SHA256，见该目录 `README.md`。
+
+**使用边界**：CRC 数值只对**本机这次构建**有效，**不得**复制到其它设备或其它构建（`AGENTS.md` 禁止表述 ⑤）。`kCFI` 类型哈希**未采集**。
+
+---
+
 ## 6. 未决项
 
 ### 6.1 UNKNOWN 汇总（27 项：CLOSED 5 / PARTIAL 8 / BLOCKED 1 / OPEN 13）
@@ -466,3 +483,4 @@ bash -n 05_userspace_firmware/tools/collect_gpu_module_identity.sh # bash
 | 2026-11-16 | **v1.7** | **Stage 4 收尾核验**（`stage4: close remaining audit items with source-level verification`）：新增 **`09_stage4_closure.md`**（Stage 4 最终裁定 + 四处更正 + 阻断清单）。①**撤回"运行内核绕过 `same_magic()`"**——`CONFIG_MODVERSIONS` 下该函数本就跳过 release 串（v6.6 `version.c:88-96`），装载合法；②**找出真正的开关**：`bypass-kernel` 把 `version.c` 的 `bad_version:` 改 `return 1`，默认关闭，2026-08-29→10-30 门控 `== 'true'`（布尔对字符串）恒失效；U4-25 拆 a/b/c；③**`uname -v` 的日期是补丁月常量**（`${os_patch_level}-05 04:20:00 UTC`），不能作构建时间；④**padding 强制校验实为 15 处**（原写"两处"，只读了 `mali_kbase_ioctl_helpers.h` 前 20 个定义），R-C2 由"tiler 失效"上调为"GPU 不可用"；⑤核 R56 交付包 23 条目 **0 个固件**（U4-12 属商业阻断）；⑥`/proc/modules` taint 仅 `(O)`、无 `F`。**计数 27/5/4/3 → 27/5/5/3**；D-021 改写，新增 D-023/D-024/D-025 |
 | 2026-11-16 | **v1.8** | **Stage 4 全量收尾（TASK-STAGE4-FINAL）**：`09` 追加 **§11**（三条新证据 + 一条自我更正）。①**UAPI 结构体双向全量比对**：51 个共同结构体、实质差异 **0**（`mem_sync` 仅重命名 `handle`→`gpu_va`；CSG 112→120 的扩展被 `_1_35` 变体逐字段迁移吸收）→ **U4-04b 闭合**；②**R56 实际删除 6 个 ioctl**，含 MTK 私有 **80**（`INTERNAL_FENCE_WAIT`，仅超时上报与可选自愈 reset）与 **55**（`SET_LIMITED_CORE_COUNT`）→ U4-14 精确化；③**CSF 固件在首次 `open()` 加载、不在 probe**（R49/R56 同构）→ **U4-10 转 PARTIAL**、**U4-12 单列 BLOCKED**。**计数 27/5/5/3 → 27/5/6/1/15**（五态：CLOSED/PARTIAL/BLOCKED/OPEN/UNKNOWN） |
 | 2026-11-16 | **v1.9** | **Stage 4 剩余取证与 DDK 路线纠偏（TASK-STAGE4-REMAINDER）**：新增 `tools/collect_stage4_remainder.sh`（464 行，11 段合并只读采集，`NOT_AVAILABLE` 容错，**未执行**）。本目录四处口径更正：①**U4-04c 未知面由 15 项收窄到 4 项**——R49 kbase **内联校验 padding（9 处）**，含现版 CSG create 的 `padding[9]`（40–111），是 R56 所查 `padding[62]` 的**真子集**（`D-031`）；②**props 实为 83 项共同 + 3 项新增**、序列化缓冲 **749 → 781 B**；「568/592」仅 `sizeof` 人工推算（`D-032`）；③**ioctl 54 → 50**（删 6 增 2），**ioctl 55 在 CSF 上本为 no-op**（唯一消费者是 JM 后端）；④**R49 已完整支持 `tKRx`**，`features` 与 R56 逐项相同。**计数 27/5/6/1/15 → 27/5/8/1/13**（U4-14、U4-15 转 PARTIAL，`D-033`）；P0 仍 3 |
+| 2026-11-16 | **v2.0** | **第一轮真机采集回传 + 脚本 v1.1**：用户执行脚本 v1.0 并回传 `GPU_AUDIT_STAGE4.zip`。①**发现并修复 v1.0 的输出缺陷**：`say()` 写文件、但 43 处原始命令管道只写 stdout → 回传文件只有计数层、无字节/行级内容；v1.1 改为单通道 `tee`，本机验证文件与终端 `diff` 为 0 行。②**可用的部分并入证据**：新增 `evidence/stage4_round1_20261116/`（kbase **513** 条 / ged **241** 条 import 符号 + CRC32，其中 **84** 条为 MTK 侧符号）。③**三条实测结论**：GPU = `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`；`CONFIG_MALI_MTK_FENCE_DEBUG` 在**设备构建上确证为开**（`Internal fence wait`=1）→ U4-14 的可行性子项升级为 [D·A]；`ged.ko` 不 import 任何 kbase 符号（Stage 3 定理实测复核）。④**计数不变 27/5/8/1/13**（U4-24b 只闭了 CRC 一半，kCFI 未采）。细目见 `06/STAGE4_DEVICE_COLLECTION_PLAN.md` §9 |

@@ -368,7 +368,58 @@ ioctl(5, _IOC(_IOC_READ|_IOC_WRITE, 0x80, 0x3a, 0x70), 0x7ffd12345678) = 0
 
 ---
 
-## 9. 引用
+## 9. 第一轮执行结果评估（2026-11-16 09:01 / 09:02）
+
+> **结论先行**：脚本 v1.0 有**输出缺陷**，回传的数据只到"计数与路径"这一层，**字节级与行级内容全部缺失**。已修 v1.1，需重跑一次补齐。**这不是执行者的问题**，是脚本自身的单通道设计错误。
+
+### 9.1 缺陷根因
+
+`v1.0` 里 `say()` 会同时写终端与结果文件，但脚本有 **43 处**原始命令管道（`od` / `readelf` / `grep` / `dumpsys` / `find`）只写 stdout，**不进文件**。所以终端滚得很快、看起来"全采到了"，存下来的 `.txt` 却几乎只有标题。
+
+| 类别 | v1.0 落盘 | 例 |
+| --- | --- | --- |
+| `say` 拼接行 | ✅ | `SIZE: 307200 bytes`、`COUNT: 1`、`VALUE: Mali-G925-...` |
+| 原始命令输出 | ❌ | 固件前 24 字节、`entry_end_offset`、mount 行、dmesg 行、ELF 符号 |
+| `__versions` 转储 | ✅ | 因为用了 `> 独立文件` 重定向 |
+
+**v1.1 的修法**：主体整体放进 `main()` 子 shell，`main 2>&1 | tee -a "$MAIN"`，所有输出走同一条管道；无 `tee` 时用内置 `tee_a` 回退。已在本机验证 **文件内容与终端输出 `diff` 为 0 行**，并新增 `SELFCHECK: 数据行数` 便于自检（< 60 即说明多数命令没产出）。
+
+### 9.2 第一轮确实拿到的（可用）
+
+| 项 | 内容 | 对台账的作用 |
+| --- | --- | --- |
+| **E** | `Mali-G925-Immortalis 12 cores r0p1 0x0D080300`（两条路径一致） | **硬件 SKU 确认为 G925 MC12**；`0x0D080300` 的 product id 段对应 `tKRx` |
+| **G** | `Internal fence wait` = **1**、`Internal fence timeouts` = **4**、`ged_mali_event_notify_fence_timeout_event` = **2** | **U4-14 的"可行性"子项闭合**：`CONFIG_MALI_MTK_FENCE_DEBUG` 在本机 OEM 构建里**是开的**，ioctl 80 在 OEM 栈上可达（此前只有 [E3] 推测） |
+| **F** | kbase **513** 条、ged **241** 条 import 符号 + CRC32 | **U4-24b 的 CRC 一半闭合**；证据见 `05/evidence/stage4_round1_20261116/` |
+| **H-4** | `disagrees about version of symbol` 计数 **0** | 运行态**没有**版本冲突记录，与"装载成功"自洽（仍不能反推 R56 兼容） |
+| **H** | dmesg 共 103,115 / 103,905 行（两次运行） | 说明 dmesg 可读、未被 restrict |
+| **C** | overlay 行 18、vendor 行 29；`/data/adb/ksu` 与 `/data/adb/modules` 存在 | 有 KSU 环境，但**是否覆盖 `/vendor` 仍需看具体 mount 行**——行本身没落盘 |
+| **I** | `/sys/kernel/debug/mali0` 不存在 | debugfs 未挂载或路径不同；**U4-02/U4-15 的这条路走不通**，需换 `/proc/mali0` 或无则放弃 |
+| **J** | `vulkan.mali.so` 133,416 B / `libgpud.so` 395,856 B / `libgpud_sys.so` 396,752 B / `libged.so` 101,944 B（SHA256 全取） | 四库实体与哈希确认；**DT_NEEDED 与符号集缺失** |
+| **K-4** | **30 个**进程持有 `/dev/mali0`（含 `surfaceflinger`、`camerahalserver`、`com.miui.home` 等） | U4-21 从"是否有硬依赖"变成"依赖面很宽"，但**仍需 K-1/K-2/K-3 才能定性** |
+
+### 9.3 第一轮缺失、必须重跑的（v1.1 已覆盖）
+
+| 段 | 缺什么 | 影响的台账项 |
+| --- | --- | --- |
+| **B** | 固件前 24 字节、`byte[0x04]`、`u32[0x10] entry_end_offset`、尾部 32 字节 | **U4-11 / U4-13**（此前只有 header 0.3 的 8 字节，`entry_end_offset` 从未取到） |
+| **D** | `/sys/kernel/notes` 的 build-id 字节、kbase `.note.gnu.build-id` | **U4-26** |
+| **H-1/2/3/5** | 实际 dmesg 行（固件加载、GLB、git_sha） | **U4-02** |
+| **J** | `DT_NEEDED` 列表、`GLOBAL DEFAULT` 符号集 | **U4-17 / U4-23** |
+| **K-1/2/3** | 属性值、`ld.config.txt` 的 EGL 路径、SF 后端行 | **U4-06 / U4-20** |
+| **C-1** | mount 具体行 | **U4-27** |
+
+### 9.4 重跑方式
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/JiangXue5/K80U_GPU_R56_AUDIT/main/05_userspace_firmware/tools/collect_stage4_remainder.sh -o /data/local/tmp/c.sh && sh /data/local/tmp/c.sh
+```
+
+跑完只回传**最新那一份** `stage4_remainder_*.txt`（新的会更大，因为这次带数据）。判断标准：文件末尾 `SELFCHECK: 数据行数` 应 **> 300**；若仍 < 60，说明脚本没更新成功。
+
+---
+
+## 10. 引用
 
 | 引用 | 位置 |
 | --- | --- |

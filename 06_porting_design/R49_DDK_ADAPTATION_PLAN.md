@@ -203,6 +203,32 @@
 | GPUFreq / GPUEB | `mtk_gpufreq_wrapper` / `mtk_gpueb` **引用** kbase（正向），kbase 也被它们引用 | 若 kbase 换 R56，**连接层需重建**（`04/06`：保留 10 / 适配 2） | **CONFIRMED**（依赖方向）/ **UNKNOWN**（适配细节） |
 | MET（`met_gpu_*`） | 本机**未装载** | 不构成风险面 | **CONFIRMED**（[D·B]） |
 
+### 7.1 接口面已量化：84 条 MTK 侧符号（2026-11-16 实测）
+
+对设备构建做 `readelf -x __versions` 全量解析后，R49 kbase 的 **513** 条 import 里有 **84 条**指向 MTK 平台模块。这份清单是 DDK-B 路线**唯一已经落到符号级**的约束——改造后的 DDK 或 R56 kbase 必须让这 84 条全部解析成功。
+
+| 组 | 条数 | 代表符号 | 归属模块 |
+| --- | ---: | --- | --- |
+| `ged_mali_event_*` | 7 | `ged_mali_event_init`、`ged_mali_event_notify_fence_timeout_event`、`ged_mali_event_update_device_lost_nolock` | `ged.ko` |
+| `ged_dvfs_*` | 20 | `ged_dvfs_cal_gpu_utilization_ex_fp`、`ged_dvfs_gpu_freq_commit_fp`、`ged_dvfs_write_sysram_last_commit_*` | `ged.ko` |
+| 其它 `ged_*`（APO / KPI / idle 统计 / 白盒） | 22 | `ged_gpu_apo_notify`、`ged_kpi_get_target_fps`、`ged_get_predict_active_time`、`ged_set_whitebox_power_state_store` | `ged.ko` |
+| `gpufreq_*` | 16 | `gpufreq_bringup`、`gpufreq_commit`、`gpufreq_set_limit`、`gpufreq_get_shader_present` | `mtk_gpufreq_wrapper.ko` |
+| `gpueb_*` / `wait_gpueb` | 4 | `gpueb_get_mbox1_irq`、`gpueb_clr_mbox1_irq`、`gpueb_dump_status`、`wait_gpueb` | `mtk_gpueb.ko` |
+| `mtk_*`（SWPM / PMU / LTR / 带宽 / 计时） | 15 | `mtk_swpm_gpu_pm_start_fp`、`mtk_ltr_gpu_pmu_start_fp`、`mtk_bandwidth_resource_init`、`mtk_get_system_timer_fp` | 多个 |
+| **合计** | **84** | | |
+
+> 逐条清单（含 CRC32）见 [`05_userspace_firmware/evidence/stage4_round1_20261116/mtk_side_symbols.md`](../05_userspace_firmware/evidence/stage4_round1_20261116/mtk_side_symbols.md)。
+
+**三条推论（都可直接用于 Stage 5 的工作量估算）**：
+
+1. **`_fp` 后缀占比高**（`ged_dvfs_*` / `mtk_*_fp`）：说明这些是**运行时解析的函数指针**，不是编译期强绑定。改造时可用同一套 `mtk_*_fp` 结构体，**不需要重编 MTK 模块**——这对 DDK-B 是实质利好。
+2. **`ged.ko` 不 import 任何 kbase 符号**（241 条里 0 命中）：换 kbase 时 `ged` 无需重编，失败面**单向**。
+3. **`module_layout` CRC 两模块同为 `0x4e276f37`**：说明两者针对同一内核配置构建。R56 kbase 若用不同内核头文件构建，**这一条就会先炸**（`disagrees about version of symbol module_layout`），是最廉价的失败信号。
+
+标签：**[D·A]**（设备构建直接读出），不是推理。
+
+---
+
 > **本路线的结构性优势**：这些 MTK 私有对接**存在于 R49 DDK 源码内部**（`libGLES_mali` 就是调用方）。若拿到源码，这部分**不需要重写**；而 DDK-A（R56）必须把它们重新接一遍。这是 §3.3 中"改造是增量"的技术依据。标签 **LIKELY**（推理，未验证）。
 
 ---

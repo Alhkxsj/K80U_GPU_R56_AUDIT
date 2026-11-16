@@ -1,32 +1,34 @@
 #!/system/bin/sh
 # =============================================================================
-# collect_stage4_remainder.sh — Stage 4 剩余缺口的最小化只读采集（合并版）
+# collect_stage4_remainder.sh — v1.1  Stage 4 剩余缺口的最小化只读采集（合并版）
 #
-# 目的：一次运行，覆盖 Stage 4 台账里仍然 OPEN / PARTIAL 的只读可查项目。
+# v1.1 修复（2026-11-16）：
+#   v1.0 的 say() 会写文件，但 43 处原始命令管道只写 stdout，
+#   导致回传的 .txt 只有标题、没有数据。v1.1 把**所有输出**收进单一通道：
+#   整个主体在子 shell 里跑，stdout 统一经 tee 落盘，文件内容 ≡ 终端内容。
 #
-#   A 环境与指纹（所有结论的锚点）
-#   B 固件：header offset 0x10（entry_end_offset）+ 尾部 32 字节        → U4-11 / U4-13
-#   C mount / overlay / KSU 痕迹                                        → U4-27
-#   D 内核 build-id + 版本                                              → U4-26
-#   E GPU 产品识别（gpuinfo sysfs）                                     → U4-12 / U4-04
-#   F 模块 __versions（ged 抽样 + kbase 全量）                          → U4-24b
-#   G OEM kbase 的 MTK 扩展开关（ioctl 55 / 80 是否编进设备构建）       → U4-14
-#   H dmesg 中的 GPU / 固件 / GLB 线索                                  → U4-02 / U4-11
-#   I mali debugfs 枚举                                                 → U4-02 / U4-15
-#   J Vulkan 薄壳与 gpud / ged 的 ELF 元数据                            → U4-17 / U4-23
-#   K 属性面（EGL / Vulkan / gralloc / 后端选择线索）                   → U4-06 / U4-20
+# 覆盖：
+#   A 环境与指纹
+#   B CSF 固件 header / entry_end_offset / 尾部                      → U4-11 / U4-13
+#   C mount / overlay / KSU 痕迹                                     → U4-27
+#   D 内核 build-id / 模块 build-id                                   → U4-26
+#   E GPU 产品识别                                                    → U4-12 / U4-04
+#   F 模块 __versions（ged 抽样 + kbase 全量，落独立文件）            → U4-24b
+#   G OEM kbase 是否编入 MTK 私有扩展                                 → U4-14
+#   H dmesg 线索                                                      → U4-02 / U4-11 / U4-25b
+#   I mali debugfs 枚举                                               → U4-02 / U4-15
+#   J Vulkan 薄壳 / gpud / ged 的 ELF 元数据                          → U4-17 / U4-23
+#   K 属性面、EGL 路径、后端线索、/dev/mali0 holders                   → U4-06 / U4-20 / U4-21
 #
-# 严格约束：
-#   * 只读。不复制、不导出、不生成任何二进制副本；不修改任何设备文件。
-#   * 不装载 / 不卸载 / 不替换任何模块；不触发 GPU 故障注入。
-#   * 工具缺失时输出 NOT_AVAILABLE，**不中断脚本**。
-#   * 不采 strace（见 README §6：单列、可选、且有明确局限）。
-#   * 不重采已完成的三份 Stage 4 基线 + 两批补充采集。
+# 严格约束（红线）：
+#   * 只读。不复制、不导出、不压缩、不上传任何 .so / .ko / .bin 本体。
+#   * 不装载/卸载/替换模块或固件；不写任何分区；不重启；不做故障注入。
+#   * 任一工具或路径缺失 → 打印 NOT_AVAILABLE / NOT_FOUND 并继续，不中断。
+#   * 所有输出有界（head/tail/grep -m），dmesg 只取片段，不整份落盘。
 #
-# 用法（aShell You，已 root）：
-#   su -c 'sh /sdcard/GPU_AUDIT_STAGE4/collect_stage4_remainder.sh'
-#
-# 退出码：0 = 脚本跑完（不代表证据已闭合）；1 = 输出目录不可用
+# 用法：
+#   sh collect_stage4_remainder.sh
+#   OUTDIR=/data/local/tmp/GPU_AUDIT_STAGE4 sh collect_stage4_remainder.sh
 # =============================================================================
 
 set -u
@@ -46,10 +48,9 @@ MAIN="$OUTDIR/stage4_remainder_${TS_TAG}.txt"
 : > "$MAIN" 2>/dev/null || { echo "FATAL: cannot write $MAIN" >&2; exit 1; }
 
 # ---------------------------------------------------------------- 基础工具 ----
-say() {
-    printf '%s\n' "$*"
-    printf '%s\n' "$*" >> "$MAIN" 2>/dev/null
-}
+have() { command -v "$1" >/dev/null 2>&1; }
+
+say() { printf '%s\n' "$*"; }
 
 sec() {
     say ""
@@ -58,10 +59,7 @@ sec() {
     say "=================================================================="
 }
 
-# have <cmd>  -> 0 if usable
-have() { command -v "$1" >/dev/null 2>&1; }
-
-# need <cmd> <what>  -> echoes NOT_AVAILABLE once and returns 1
+# need <cmd> <what>  -> 打印一次 NOT_AVAILABLE 并返回 1
 need() {
     if ! have "$1"; then
         say "NOT_AVAILABLE: tool '$1' not found ($2)"
@@ -70,395 +68,423 @@ need() {
     return 0
 }
 
-# rd <path>  -> cat a text file if readable, else NOT_AVAILABLE / NOT_FOUND
+# sub <标题> —— 小标题
+sub() { say ""; say "[$*]"; }
+
+# rd <path> —— 读文本文件
 rd() {
     if [ -r "$1" ]; then
         cat "$1" 2>/dev/null
     elif [ -e "$1" ]; then
-        echo "NOT_READABLE: $1"
+        say "NOT_READABLE: $1"
     else
-        echo "NOT_FOUND: $1"
+        say "NOT_FOUND: $1"
     fi
 }
 
-DEVINFO="$(getprop ro.product.device 2>/dev/null || echo NOT_AVAILABLE)"
+# fsize <path> -> 字节数或 NOT_AVAILABLE
+fsize() {
+    stat -c %s "$1" 2>/dev/null || echo NOT_AVAILABLE
+}
 
-# =============================================================== A 环境 ======
+# =============================================================================
+# 主体：所有输出走 stdout，外层统一 tee 进文件
+# =============================================================================
+main() {
+
 sec "A. 环境与指纹"
 say "COLLECT_TIME   : $(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo NOT_AVAILABLE)"
-say "SCRIPT_VERSION : stage4-remainder v1.0"
+say "SCRIPT_VERSION : stage4-remainder v1.1"
 say "OUTPUT_DIR     : $OUTDIR"
 say "UID            : $(id -u 2>/dev/null || echo NOT_AVAILABLE)"
 say "SELINUX_CTX    : $(id -Z 2>/dev/null || echo NOT_AVAILABLE)"
 say "MODEL          : $(getprop ro.product.model 2>/dev/null || echo NOT_AVAILABLE)"
-say "DEVICE         : $DEVINFO"
+say "DEVICE         : $(getprop ro.product.device 2>/dev/null || echo NOT_AVAILABLE)"
 say "FINGERPRINT    : $(getprop ro.build.fingerprint 2>/dev/null || echo NOT_AVAILABLE)"
 say "SDK            : $(getprop ro.build.version.sdk 2>/dev/null || echo NOT_AVAILABLE)"
 say "KERNEL_UNAME_R : $(uname -r 2>/dev/null || echo NOT_AVAILABLE)"
 say "KERNEL_UNAME_V : $(uname -v 2>/dev/null || echo NOT_AVAILABLE)"
 say "KERNEL_UNAME_A : $(uname -a 2>/dev/null || echo NOT_AVAILABLE)"
-say ""
-say "-- tool availability --"
-for t in od xxd strings readelf sha256sum stat ls grep awk sed dmesg mount getprop dumpsys; do
+
+sub "工具可用性"
+for t in od xxd strings readelf sha256sum stat ls grep awk sed dmesg mount getprop dumpsys tee; do
     if have "$t"; then say "TOOL $t: OK"; else say "TOOL $t: NOT_AVAILABLE"; fi
 done
-say ""
-say "-- item coverage --"
-say "A 环境........: covered"
-say "B 固件头/尾...: U4-11, U4-13"
-say "C mount.......: U4-27"
-say "D build-id....: U4-26"
-say "E gpuinfo.....: U4-12, U4-04"
-say "F __versions..: U4-24b"
-say "G MTK 扩展....: U4-14"
-say "H dmesg.......: U4-02, U4-11"
-say "I debugfs.....: U4-02, U4-15"
-say "J ELF 元数据..: U4-17, U4-23"
-say "K 属性面......: U4-06, U4-20"
+
+sub "自检：写文件能力"
+PROBE="$OUTDIR/.write_probe_$$"
+if ( printf 'x\n' > "$PROBE" ) 2>/dev/null; then
+    say "WRITE_TEST: OK ($OUTDIR)"
+    rm -f "$PROBE" 2>/dev/null
+else
+    say "WRITE_TEST: FAILED"
+fi
 
 # =============================================================== B 固件 ======
-sec "B. CSF 固件：header 0x10 起 + 尾部 32 字节（只读）"
+sec "B. CSF 固件：header / entry_end_offset / 尾部（只读）"
 FW="${FW:-/vendor/firmware/mali_csffw.bin}"
 if [ -r "$FW" ]; then
     say "PATH: $FW"
-    say "SIZE: $(stat -c %s "$FW" 2>/dev/null || echo NOT_AVAILABLE) bytes"
+    say "SIZE: $(fsize "$FW") bytes"
+
+    sub "B-1 header 前 24 字节（hex）"
+    say "  offset 0x00 magic | 0x04 version_minor | 0x05 version_major"
+    say "  offset 0x08 version_hash (u32) | 0x10 entry_end_offset (u32)"
     if need od "firmware header"; then
-        say ""
-        say "[B-1] header bytes 0x00-0x17 (24 bytes)"
-        say "  offset 0x04 = version_minor, 0x05 = version_major"
-        say "  offset 0x08 = version_hash (u32), 0x10 = entry_end_offset (u32)"
-        od -An -tx1 -N 24 "$FW" 2>/dev/null | sed 's/^/  /'
-        say ""
-        say "[B-2] entry_end_offset (offset 0x10, 4 bytes LE)"
-        od -An -tu4 -j 16 -N 4 "$FW" 2>/dev/null | sed 's/^/  DEC: /'
-        od -An -tx1 -j 16 -N 4 "$FW" 2>/dev/null | sed 's/^/  HEX: /'
-        FSZ="$(stat -c %s "$FW" 2>/dev/null || echo 0)"
-        case "$FSZ" in
-            ''|*[!0-9]*) say "TAIL_SKIP: size unknown" ;;
-            *)
-                if [ "$FSZ" -gt 32 ]; then
-                    OFF=$((FSZ - 32))
-                    say ""
-                    say "[B-3] last 32 bytes (offset $OFF .. $((FSZ-1)))"
-                    od -An -tx1 -j "$OFF" -N 32 "$FW" 2>/dev/null | sed 's/^/  /'
-                else
-                    say "TAIL_SKIP: file too small"
-                fi
-                ;;
-        esac
+        od -An -tx1 -N 24 "$FW" 2>/dev/null | sed 's/^ */  /'
+        say "  --- 单字节读数 ---"
+        say "  byte[0x04] = $(od -An -tu1 -j 4 -N 1 "$FW" 2>/dev/null | tr -d ' ')   <-- version_minor"
+        say "  byte[0x05] = $(od -An -tu1 -j 5 -N 1 "$FW" 2>/dev/null | tr -d ' ')   <-- version_major"
+        say "  u32[0x08]  = $(od -An -tu4 -j 8 -N 4 "$FW" 2>/dev/null | tr -d ' ')   (version_hash, 仅锚点)"
+        say "  u32[0x10]  = $(od -An -tu4 -j 16 -N 4 "$FW" 2>/dev/null | tr -d ' ')   <-- entry_end_offset"
     fi
-    if need strings "firmware tail strings"; then
-        FSZ2="$(stat -c %s "$FW" 2>/dev/null || echo 0)"
-        case "$FSZ2" in
-            ''|*[!0-9]*) : ;;
-            *)
-                if [ "$FSZ2" -gt 4096 ]; then
-                    say ""
-                    say "[B-4] printable strings in last 4096 bytes (max 40)"
-                    strings -a -n 6 "$FW" 2>/dev/null | tail -40 | sed 's/^/  /'
+
+    FSZ="$(fsize "$FW")"
+    case "$FSZ" in
+        ''|*[!0-9]*) say "TAIL_SKIP: size unknown" ;;
+        *)
+            if [ "$FSZ" -gt 64 ]; then
+                OFF=$((FSZ - 32))
+                sub "B-2 最后 32 字节（offset $OFF .. $((FSZ-1)))"
+                if need od "firmware tail"; then
+                    od -An -tx1 -j "$OFF" -N 32 "$FW" 2>/dev/null | sed 's/^ */  /'
                 fi
-                ;;
-        esac
-    fi
+
+                sub "B-3 尾部 4096 字节内的可打印串（≤40 条）"
+                if need strings "firmware strings"; then
+                    tail -c 4096 "$FW" 2>/dev/null | strings -n 4 2>/dev/null | tail -40
+                fi
+            else
+                say "TAIL_SKIP: file too small ($FSZ)"
+            fi
+            ;;
+    esac
 else
-    say "NOT_READABLE: $FW (root required?)"
+    say "NOT_READABLE: $FW"
+    say "  备选路径探测："
+    for p in /vendor/firmware/mali_csffw.bin /vendor/firmware/mali/mali_csffw.bin \
+             /odm/firmware/mali_csffw.bin /vendor/etc/firmware/mali_csffw.bin; do
+        if [ -e "$p" ]; then say "  EXISTS: $p ($(fsize "$p") bytes)"; else say "  ABSENT: $p"; fi
+    done
 fi
 
 # =============================================================== C mount =====
 sec "C. mount / overlay / KSU 痕迹（只读）"
-if need grep "mountinfo"; then
-    say "[C-1] /proc/self/mountinfo — vendor / overlay / KSU 相关行"
-    cat /proc/self/mountinfo 2>/dev/null \
-        | grep -Ei "vendor|overlay|magisk|ksu|susfs|apatch|worker" \
-        | sed 's/^/  /' | head -80
-    say ""
-    say "[C-2] 计数"
-    say "  vendor_lines : $(cat /proc/self/mountinfo 2>/dev/null | grep -ci vendor)"
-    say "  overlay_lines: $(cat /proc/self/mountinfo 2>/dev/null | grep -ci overlay)"
-    say "  OverlayFS 类型行: $(cat /proc/self/mountinfo 2>/dev/null | grep -ci ' - overlay ')"
+sub "C-1 mountinfo 中 vendor / overlay / erofs 相关行（≤50 行）"
+if [ -r /proc/self/mountinfo ]; then
+    grep -Ei 'vendor|overlay|erofs|/system_ext|/product' /proc/self/mountinfo 2>/dev/null | head -50
+else
+    say "NOT_READABLE: /proc/self/mountinfo"
 fi
+
+sub "C-2 计数"
+say "  vendor_lines  : $(grep -c 'vendor' /proc/self/mountinfo 2>/dev/null || echo 0)"
+say "  overlay_lines : $(grep -c 'overlay' /proc/self/mountinfo 2>/dev/null || echo 0)"
+say "  erofs_lines   : $(grep -c 'erofs' /proc/self/mountinfo 2>/dev/null || echo 0)"
+
+sub "C-3 mount | grep overlay / vendor（≤30 行）"
 if need mount "mount table"; then
-    say ""
-    say "[C-3] mount | grep -Ei 'overlay|vendor'（前 30 行）"
-    mount 2>/dev/null | grep -Ei "overlay|vendor" | head -30 | sed 's/^/  /'
+    mount 2>/dev/null | grep -Ei 'overlay|vendor' | head -30
 fi
-say ""
-say "[C-4] 已知的 KSU / NoMount 位置是否存在（只列目录，不读内容）"
-for p in /data/adb/modules /data/adb/ksu /data/adb/susfs /sbin/.magisk; do
-    if [ -e "$p" ]; then say "  EXISTS: $p"; else say "  ABSENT: $p"; fi
-done
-say "  说明：上述目录存在 ≠ overlay 正在覆盖 /vendor；判定以 C-1 的 mount 行为准。"
 
-# ============================================================= D build-id ===
+sub "C-4 overlay 上层目录（是否存在，不读内容）"
+for d in /data/adb/modules /data/adb/ksu /data/adb/susfs /sbin/.magisk /debug_ramdisk; do
+    if [ -d "$d" ]; then say "  EXISTS: $d"; else say "  ABSENT: $d"; fi
+done
+say "  说明：目录存在 ≠ /vendor 正在被覆盖；判定以 C-1 的 mount 行为准。"
+
+# =============================================================== D build-id ==
 sec "D. 内核 build-id 与版本（U4-26）"
-KB_NOTES="/sys/kernel/notes"
-if [ -r "$KB_NOTES" ]; then
-    say "PATH: $KB_NOTES"
-    say "SIZE: $(stat -c %s "$KB_NOTES" 2>/dev/null || echo NOT_AVAILABLE) bytes"
+sub "D-1 /sys/kernel/notes 原始字节（前 96 字节）"
+if [ -r /sys/kernel/notes ]; then
+    say "  SIZE: $(fsize /sys/kernel/notes) bytes"
     if need od "kernel notes"; then
-        say "[D-1] notes 原始字节（前 128 字节）"
-        od -An -tx1 -N 128 "$KB_NOTES" 2>/dev/null | sed 's/^/  /'
+        od -An -tx1 -N 96 /sys/kernel/notes 2>/dev/null | sed 's/^ */  /'
     fi
+    sub "D-2 readelf -n /sys/kernel/notes（可能因非 ELF 头而失败，属正常）"
     if need readelf "kernel notes"; then
-        say ""
-        say "[D-2] readelf -n /sys/kernel/notes"
-        readelf -n "$KB_NOTES" 2>/dev/null | head -40 | sed 's/^/  /'
+        readelf -n /sys/kernel/notes 2>&1 | head -20 | sed 's/^/  /'
     fi
 else
-    say "NOT_READABLE: $KB_NOTES"
-fi
-say ""
-say "[D-3] /proc/version"
-rd /proc/version | sed 's/^/  /'
-say ""
-say "[D-4] /sys/module/mali_kbase_mt6991_r49/ 下的 notes 与 version（模块自身 build-id）"
-KB=/sys/module/mali_kbase_mt6991_r49
-if [ -d "$KB" ]; then
-    say "  version: $(rd $KB/version | head -1)"
-    if [ -r "$KB/notes/.note.gnu.build-id" ] && need od "module build-id"; then
-        say "  module build-id bytes:"
-        od -An -tx1 "$KB/notes/.note.gnu.build-id" 2>/dev/null | sed 's/^/    /'
-    else
-        say "  module build-id: NOT_AVAILABLE"
-    fi
-else
-    say "  NOT_FOUND: $KB"
+    say "NOT_READABLE: /sys/kernel/notes"
 fi
 
-# ============================================================= E gpuinfo =====
+sub "D-3 /proc/version"
+rd /proc/version
+
+sub "D-4 kbase 模块自身 version / srcversion / build-id"
+MODKB="/sys/module/mali_kbase_mt6991_r49"
+if [ -d "$MODKB" ]; then
+    say "  version     : $(cat "$MODKB/version" 2>/dev/null || echo NOT_AVAILABLE)"
+    say "  srcversion  : $(cat "$MODKB/srcversion" 2>/dev/null || echo NOT_AVAILABLE)"
+    say "  vermagic    : $(cat "$MODKB/vermagic" 2>/dev/null || echo NOT_AVAILABLE)"
+    HOLD="$(ls -1 "$MODKB/holders" 2>/dev/null | tr '\n' ' ')"
+    say "  holders     : ${HOLD:-NONE}"
+    if [ -r "$MODKB/notes/.note.gnu.build-id" ]; then
+        say "  build-id    : $(od -An -tx1 -j 12 -N 20 "$MODKB/notes/.note.gnu.build-id" 2>/dev/null | tr -d ' \n')"
+    else
+        say "  build-id    : section file absent"
+    fi
+else
+    say "NOT_FOUND: $MODKB"
+fi
+
+# =============================================================== E gpuinfo ===
 sec "E. GPU 产品识别（U4-12 / U4-04）"
-FOUND_GPUINFO=0
-for p in \
-    /sys/class/misc/mali0/device/gpuinfo \
-    /sys/devices/platform/soc/48000000.mali/gpuinfo \
-    /sys/devices/platform/*.mali/gpuinfo
-do
+for p in /sys/class/misc/mali0/device/gpuinfo /sys/devices/platform/soc/48000000.mali/gpuinfo; do
     if [ -r "$p" ]; then
-        say "[E] PATH: $p"
-        say "    VALUE: $(cat "$p" 2>/dev/null | tr -d '\n')"
-        FOUND_GPUINFO=1
+        say "PATH : $p"
+        say "VALUE: $(cat "$p" 2>/dev/null)"
+    else
+        say "NOT_FOUND: $p"
     fi
 done
-if [ "$FOUND_GPUINFO" = "0" ]; then
-    say "NOT_AVAILABLE: gpuinfo sysfs 未找到（可能路径不同，见 E-2 的 find）"
-fi
-say ""
-say "[E-2] 兜底：在 /sys 下找 gpuinfo（限时/限量）"
-if have find; then
-    find /sys/devices -maxdepth 6 -name gpuinfo 2>/dev/null | head -5 | sed 's/^/  /'
-else
-    say "NOT_AVAILABLE: find"
-fi
-say ""
-say "  读法：期望形如 \"Mali-G925-Immortalis 12 cores r0p0 0x....\"。"
-say "        若显示 Mali-G725 或其它核数，说明产品识别与预期不符，需重新核对 MC12。"
-say ""
-say "[E-3] /proc/modules 中 GPU 链路的 taint 列（排除强制装载）"
+sub "E-2 兜底：其它 gpuinfo"
+find /sys -maxdepth 6 -name gpuinfo -type f 2>/dev/null | head -5 | while read -r q; do
+    say "  $q -> $(cat "$q" 2>/dev/null)"
+done
+say "  读法：期望 \"Mali-G925-Immortalis 12 cores r0pX 0x........\"。"
+say "        若为 G725 或核数≠12，说明 MC12 识别不符，需重核。"
+
+sub "E-3 GPU 链路模块的 taint 列（排除强制装载 F）"
 if [ -r /proc/modules ]; then
-    grep -E "^(mali_kbase|mali_mgm|mali_prot_alloc|ged|mtk_gpu|mtk_gpufreq|mtk_gpueb|mtk_ghpm|mtk_smmu_qos|mtk_cg_peak)" /proc/modules 2>/dev/null \
-        | awk '{print "  "$1"  size="$2"  refcnt="$3"  taint="$7}' | head -30
+    grep -Ei '^(ged|mali|gpufreq|mtk_)?.*(mali|ged|gpueb|gpufreq)' /proc/modules 2>/dev/null | head -20 | \
+        awk '{printf "  %-34s size=%-9s refs=%-3s state=%-8s taint=%s\n", $1,$2,$3,$5,$6}'
+    say "  --- 含 taint 标记的行 ---"
+    grep -E ' (Live|Loading) ' /proc/modules 2>/dev/null | awk '$6!="-" {printf "  %-34s taint=%s\n",$1,$6}' | head -20
 else
-    say "  NOT_READABLE: /proc/modules"
+    say "NOT_READABLE: /proc/modules"
 fi
 
-# =========================================================== F __versions ===
-sec "F. 模块 __versions 节（U4-24b；只读，输出到独立文件）"
-MODDIR="${MODDIR:-/vendor_dlkm/lib/modules}"
-if [ ! -d "$MODDIR" ]; then
-    for cand in /vendor/lib/modules /vendor_dlkm/lib/modules /system/lib/modules; do
-        if [ -d "$cand" ]; then MODDIR="$cand"; break; fi
-    done
-fi
-say "MODDIR: $MODDIR"
-say "  目的：取设备构建的 __ksymtab 期望 CRC。"
-say "  ged 用作 14 个结构一致模块的抽样；kbase 必须单独取（源码已变）。"
-if need readelf "modules"; then
-    for m in ged mali_kbase_mt6991_r49; do
-        F="$MODDIR/$m.ko"
-        OF="$OUTDIR/F_${m}_versions.txt"
-        if [ -r "$F" ]; then
-            say ""
-            say "[F] $F"
-            say "    size   : $(stat -c %s "$F" 2>/dev/null || echo NOT_AVAILABLE)"
-            say "    sha256 : $(sha256sum "$F" 2>/dev/null | awk '{print $1}')"
-            readelf -x __versions "$F" > "$OF" 2>/dev/null
-            if [ -s "$OF" ]; then
-                say "    __versions dump -> $(basename "$OF")"
-                say "    dump size      : $(stat -c %s "$OF" 2>/dev/null || echo NOT_AVAILABLE) bytes"
-                say "    dump sha256    : $(sha256sum "$OF" 2>/dev/null | awk '{print $1}')"
-                say "    (回传时只需回传这两个 dump 文件，或它们的 sha256 + 前 40 行)"
-            else
-                say "    __versions dump: NOT_AVAILABLE (readelf 未产出内容)"
-                rm -f "$OF" 2>/dev/null
-            fi
-        else
-            say ""
-            say "[F] NOT_READABLE: $F"
-        fi
-    done
-else
-    say "NOT_AVAILABLE: readelf —— 无法取 __versions"
-fi
-
-# ======================================================= G MTK 扩展开关 ====
-sec "G. OEM kbase 是否编入 MTK 私有扩展（U4-14）"
-say "  原理：CONFIG_MALI_MTK_FENCE_DEBUG 内的字符串只在该宏开启时编入 .rodata。"
-say "        串在 => ioctl 80 在设备构建上可达。"
-KBKO="$MODDIR/mali_kbase_mt6991_r49.ko"
-if [ -r "$KBKO" ] && need strings "kbase strings"; then
-    say ""
-    say "  [G-1] 'Internal fence wait' 命中数（>0 => CONFIG_MALI_MTK_FENCE_DEBUG 开）"
-    say "        COUNT: $(strings -a "$KBKO" 2>/dev/null | grep -c 'Internal fence wait')"
-    say "  [G-2] 'Internal fence timeouts' 命中数（>0 => FENCE_TIMEOUT_RESET / 跨队列恢复路径在）"
-    say "        COUNT: $(strings -a "$KBKO" 2>/dev/null | grep -c 'Internal fence timeouts')"
-    say "  [G-3] 'ged_mali_event_notify_fence_timeout_event' 命中数（>0 => MBRAIN 通道也在）"
-    say "        COUNT: $(strings -a "$KBKO" 2>/dev/null | grep -c 'ged_mali_event_notify_fence_timeout_event')"
-    say "  [G-4] 有限核数相关字符串（ioctl 55 的日志面）"
-    strings -a "$KBKO" 2>/dev/null | grep -i "limited core\|max_core_count" | head -5 | sed 's/^/        /'
-    say "  [G-5] 队列组 create 的 reserved 校验日志（R49 内联 padding 校验的证据）"
-    strings -a "$KBKO" 2>/dev/null | grep -i "Invalid reserved field not 0" | head -3 | sed 's/^/        /'
-else
-    say "NOT_AVAILABLE: 无法读取 $KBKO 或缺少 strings"
-fi
-
-# ============================================================= H dmesg ======
-sec "H. dmesg 中的 GPU / 固件 / GLB 线索（U4-02 / U4-11）"
-if need dmesg "kernel log"; then
-    DN="$(dmesg 2>/dev/null | wc -l | tr -d ' ')"
-    say "  dmesg lines: ${DN:-NOT_AVAILABLE}"
-    case "${DN:-0}" in
-        ''|*[!0-9]*) DN=0 ;;
-    esac
-    if [ "$DN" -gt 0 ]; then
-        say ""
-        say "  [H-1] mali / csf / firmware 相关（前 60 行）"
-        dmesg 2>/dev/null | grep -iE "mali|csf|gpu" | head -60 | sed 's/^/    /'
-        say ""
-        say "  [H-2] 'Loading Mali firmware'（version_hash，仅作锚点，不是 GLB 版本）"
-        dmesg 2>/dev/null | grep -i "Loading Mali firmware" | head -5 | sed 's/^/    /'
-        say "  [H-3] 'Version check failed' / 'firmware may have failed'"
-        dmesg 2>/dev/null | grep -iE "Version check failed|firmware may have failed" | head -5 | sed 's/^/    /'
-        say "  [H-4] 'disagrees about version of symbol'（U4-25b 的唯一运行态判据）"
-        say "        COUNT: $(dmesg 2>/dev/null | grep -c 'disagrees about version of symbol')"
-        say "  [H-5] 'git_sha'（固件构建标识）"
-        dmesg 2>/dev/null | grep -i "firmware git_sha" | head -3 | sed 's/^/    /'
-    else
-        say "  NOT_AVAILABLE: dmesg 返回空（Android 上可能被 dmesg_restrict 限制）"
-    fi
-fi
-
-# =========================================================== I debugfs ======
-sec "I. mali debugfs 枚举（U4-02 / U4-15）"
-DBG=/sys/kernel/debug/mali0
-if [ -d "$DBG" ]; then
-    say "PATH: $DBG"
-    if have ls; then
-        say "[I-1] 顶层条目"
-        ls -1 "$DBG" 2>/dev/null | head -60 | sed 's/^/  /'
-        say ""
-        say "[I-2] 二级条目（device / csf 子目录，若存在）"
-        for d in device csf; do
-            if [ -d "$DBG/$d" ]; then
-                say "  -- $d --"
-                ls -1 "$DBG/$d" 2>/dev/null | head -60 | sed 's/^/    /'
-            fi
+# =============================================================== F versions ==
+sec "F. 模块 __versions 节（U4-24b；落独立文件，只读）"
+if need readelf "section dump"; then
+    MODDIR="${MODDIR:-/vendor_dlkm/lib/modules}"
+    if [ ! -d "$MODDIR" ]; then
+        for cand in /vendor/lib/modules /vendor_dlkm/lib/modules /system/lib/modules /odm/lib/modules; do
+            if [ -d "$cand" ]; then MODDIR="$cand"; break; fi
         done
     fi
-    say ""
-    say "  说明：R49/R56 kbase 均未直接暴露 GLB 版本 debugfs 节点（源码已核）。"
-    say "        若 I-1/I-2 中出现 fw_* 版本类文件，再单独 cat（本脚本不自动读，避免副作用）。"
+    say "MODDIR: $MODDIR"
+    say "  目的：取设备构建的 __ksymtab 期望 CRC。ged 作 14 个结构一致模块的抽样；kbase 单独取。"
+
+    for ko in ged.ko mali_kbase_mt6991_r49.ko mali_kbase.ko; do
+        kp="$MODDIR/$ko"
+        [ -e "$kp" ] || continue
+        base="$(basename "$ko" .ko)"
+        outf="$OUTDIR/F_${base}_versions.txt"
+        say ""
+        say "  [F] $kp"
+        say "      size   : $(fsize "$kp")"
+        if need sha256sum "hash"; then
+            say "      sha256 : $(sha256sum "$kp" 2>/dev/null | awk '{print $1}')"
+        fi
+        readelf -x __versions "$kp" > "$outf" 2>/dev/null
+        if [ -s "$outf" ]; then
+            say "      __versions -> $(basename "$outf")  ($(fsize "$outf") bytes)"
+            say "      dump sha256: $(sha256sum "$outf" 2>/dev/null | awk '{print $1}')"
+            say "      前 12 行预览："
+            head -12 "$outf" 2>/dev/null | sed 's/^/        /'
+            say "      条目数（每行 16 字节 → 记录数估算）："
+            say "        $(grep -c '^  0x' "$outf" 2>/dev/null || echo NOT_AVAILABLE) 行"
+        else
+            say "      __versions: DUMP_FAILED（节可能不存在或被裁剪）"
+            rm -f "$outf" 2>/dev/null
+        fi
+    done
 else
-    say "NOT_AVAILABLE: $DBG 不存在（debugfs 未挂载或路径不同）"
-    say "  备选：ls /sys/kernel/debug 2>/dev/null | head -30"
-    ls -1 /sys/kernel/debug 2>/dev/null | head -30 | sed 's/^/    /'
+    say "SKIP: readelf 不可用，F 段无法进行"
 fi
 
-# ========================================================== J ELF 元数据 ====
-sec "J. Vulkan 薄壳与 gpud / ged 的 ELF 元数据（U4-17 / U4-23）"
-say "  说明：只读 ELF 头/动态段/动态符号，不复制文件本体。"
-for f in \
-    /vendor/lib64/hw/mt6991/vulkan.mali.so \
-    /vendor/lib64/libgpud.so \
-    /system_ext/lib64/libgpud_sys.so \
-    /vendor/lib64/libged.so
-do
-    say ""
-    if [ -r "$f" ]; then
-        say "[J] $f"
-        say "    size  : $(stat -c %s "$f" 2>/dev/null || echo NOT_AVAILABLE)"
-        say "    sha256: $(sha256sum "$f" 2>/dev/null | awk '{print $1}')"
-        if need readelf "ELF metadata"; then
-            say "    -- DT_NEEDED --"
-            readelf -d "$f" 2>/dev/null | grep -E "NEEDED|SONAME" | head -25 | sed 's/^/      /'
-            say "    -- 导出符号数 --"
-            say "      dynsym exported: $(readelf --dyn-syms "$f" 2>/dev/null | grep -c 'FUNC.*DEFAULT.*[0-9]\+$')"
-            case "$f" in
-                *vulkan.mali.so)
-                    say "    -- vk / api_version 相关字符串 --"
-                    if need strings "vulkan strings"; then
-                        strings -a -n 6 "$f" 2>/dev/null | grep -iE "vk_icd|api_version|vulkan|1\.[0-9]" | head -15 | sed 's/^/      /'
-                    fi
-                    ;;
-                *libgpud*)
-                    say "    -- gpud 符号样本（前 15 个）--"
-                    readelf --dyn-syms "$f" 2>/dev/null | awk '$4=="FUNC" && $7!="UND" {print $8}' | head -15 | sed 's/^/      /'
-                    ;;
-                *libged.so)
-                    say "    -- ged 符号样本（前 15 个）--"
-                    readelf --dyn-syms "$f" 2>/dev/null | awk '$4=="FUNC" && $7!="UND" {print $8}' | head -15 | sed 's/^/      /'
-                    ;;
-            esac
-        fi
-    else
-        say "[J] NOT_READABLE: $f"
+# =============================================================== G MTK 扩展 ==
+sec "G. OEM kbase 是否编入 MTK 私有扩展（U4-14）"
+say "  原理：CONFIG_MALI_MTK_FENCE_DEBUG 内的字符串只在该宏开启时编入 .rodata。"
+say "        串在 => ioctl 80（INTERNAL_FENCE_WAIT）在设备构建上可达。"
+GKO="${GKO:-/vendor_dlkm/lib/modules/mali_kbase_mt6991_r49.ko}"
+if [ -r "$GKO" ] && need strings "kbase strings"; then
+    cnt() { strings "$GKO" 2>/dev/null | grep -c -F "$1" 2>/dev/null || echo 0; }
+    sub "G-1 'Internal fence wait'（>0 => MALI_MTK_FENCE_DEBUG 开）"
+    say "  COUNT: $(cnt 'Internal fence wait')"
+    sub "G-2 'Internal fence timeouts'（>0 => 超时/跨队列恢复路径在）"
+    say "  COUNT: $(cnt 'Internal fence timeouts')"
+    sub "G-3 'ged_mali_event_notify_fence_timeout_event'（>0 => MBRAIN 通道在）"
+    say "  COUNT: $(cnt 'ged_mali_event_notify_fence_timeout_event')"
+    sub "G-4 有限核数相关串（ioctl 55 的日志面，≤15 条）"
+    strings "$GKO" 2>/dev/null | grep -iE 'limited.?core|core.?count|core_mask' | head -15 | sed 's/^/  /'
+    sub "G-5 队列组 create 的 reserved 校验日志（R49 内联 padding 校验旁证）"
+    strings "$GKO" 2>/dev/null | grep -iE 'reserved field not 0|padding' | head -10 | sed 's/^/  /'
+    sub "G-6 CS_QUEUE_REGISTER / tiler heap 相关串"
+    strings "$GKO" 2>/dev/null | grep -iE 'cs_queue_register|tiler_heap|queue_register' | head -10 | sed 's/^/  /'
+else
+    say "NOT_READABLE: $GKO"
+fi
+
+# =============================================================== H dmesg =====
+sec "H. dmesg 线索（U4-02 / U4-11 / U4-25b）"
+DN="$(dmesg 2>/dev/null | wc -l | tr -d ' ')"
+case "${DN:-0}" in
+    ''|*[!0-9]*) DN=0 ;;
+esac
+if [ "$DN" -gt 0 ]; then
+    say "  dmesg lines: $DN（以下均为有界摘录，不整份落盘）"
+
+    sub "H-1 mali / csf / firmware 相关（末尾 60 行）"
+    dmesg 2>/dev/null | grep -Ei 'mali|csf|firmware|gpu' | tail -60 | sed 's/^/  /'
+
+    sub "H-2 'Loading Mali firmware'（version_hash 锚点）"
+    dmesg 2>/dev/null | grep -i 'Loading Mali firmware' | tail -5 | sed 's/^/  /'
+
+    sub "H-3 'Version check failed' / 'firmware may have failed'"
+    dmesg 2>/dev/null | grep -Ei 'Version check failed|firmware may have failed' | tail -5 | sed 's/^/  /'
+
+    sub "H-4 'disagrees about version of symbol'（U4-25b 运行态判据）"
+    say "  COUNT: $(dmesg 2>/dev/null | grep -c 'disagrees about version of symbol' 2>/dev/null || echo 0)"
+
+    sub "H-5 'git_sha' / GLB 线索"
+    dmesg 2>/dev/null | grep -Ei 'git_sha|GLB|glb_' | tail -10 | sed 's/^/  /'
+else
+    say "NOT_AVAILABLE: dmesg 无输出（可能被 restrict 或需 root）"
+fi
+
+# =============================================================== I debugfs ===
+sec "I. mali debugfs 枚举（U4-02 / U4-15）"
+FOUND=0
+for d in /sys/kernel/debug/mali0 /sys/kernel/debug/mali /d/mali0; do
+    if [ -d "$d" ]; then
+        FOUND=1
+        say "FOUND: $d"
+        ls -1 "$d" 2>/dev/null | head -40 | sed 's/^/  /'
     fi
 done
-say ""
-say "[J-5] U4-23 的判据：若 libgpud.so 与 libgpud_sys.so 的导出 FUNC 符号集高度重合，"
-say "      则二者是同 API 的 vendor / system 两份拷贝；否则是不同实现。"
-say "      本脚本只给样本，完整对照需对两份 dynsym 排序后 diff（文本操作，可离线做）。"
+if [ "$FOUND" -eq 0 ]; then
+    say "NOT_AVAILABLE: 未找到 mali debugfs 目录（debugfs 可能未挂载）"
+    sub "I-2 /sys/kernel/debug 顶层（≤20 项）"
+    ls -1 /sys/kernel/debug 2>/dev/null | head -20 | sed 's/^/  /'
+    sub "I-3 全局搜 mali 相关 debug 目录"
+    find /sys/kernel/debug -maxdepth 2 -iname '*mali*' 2>/dev/null | head -10 | sed 's/^/  /'
+fi
 
-# ============================================================= K 属性面 ====
-sec "K. 属性面与后端选择线索（U4-06 / U4-20）"
-if need getprop "props"; then
-    say "[K-1] 图形相关属性"
-    getprop 2>/dev/null | grep -iE "egl|vulkan|gles|gpu|gralloc|hwui|composer|renderengine" | head -50 | sed 's/^/  /'
-fi
-say ""
-say "[K-2] linker 配置中的 EGL 搜索路径（U4-06）"
-if [ -r /linkerconfig/ld.config.txt ]; then
-    grep -n -iE "egl|mali|mt6991" /linkerconfig/ld.config.txt 2>/dev/null | head -30 | sed 's/^/  /'
-else
-    say "  NOT_READABLE: /linkerconfig/ld.config.txt"
-fi
-say ""
-say "[K-3] SurfaceFlinger 后端线索（U4-20；有界输出）"
-if need dumpsys "SurfaceFlinger"; then
-    dumpsys SurfaceFlinger 2>/dev/null | grep -iE "GLES|skiagl|RenderEngine|Vulkan|backend" | head -20 | sed 's/^/  /'
-fi
-say ""
-say "[K-4] /dev/mali0 与 mali0 相关 fd（U4-21）"
-ls -l /dev/mali0 2>/dev/null | sed 's/^/  /' || say "  NOT_FOUND: /dev/mali0"
-if need ls "proc fd"; then
-    say "  -- 打开 /dev/mali0 的进程（需要 root；可能为空）--"
-    for pid in /proc/[0-9]*; do
-        if ls -l "$pid/fd" 2>/dev/null | grep -q mali0; then
-            say "    PID ${pid#/proc/} : $(cat $pid/comm 2>/dev/null || echo NOT_AVAILABLE)"
+# =============================================================== J ELF =======
+sec "J. Vulkan 薄壳 / gpud / ged 的 ELF 元数据（U4-17 / U4-23）"
+say "  只读 ELF 头 / 动态段 / 动态符号；不复制文件本体。"
+if need readelf "ELF metadata"; then
+    for so in /vendor/lib64/hw/mt6991/vulkan.mali.so \
+              /vendor/lib64/hw/vulkan.mali.so \
+              /vendor/lib64/libgpud.so \
+              /system_ext/lib64/libgpud_sys.so \
+              /vendor/lib64/libged.so; do
+        [ -e "$so" ] || continue
+        say ""
+        say "  [J] $so"
+        say "      size  : $(fsize "$so")"
+        if need sha256sum "hash"; then
+            say "      sha256: $(sha256sum "$so" 2>/dev/null | awk '{print $1}')"
         fi
-    done | head -20
+        say "      -- DT_NEEDED --"
+        readelf -d "$so" 2>/dev/null | awk '/NEEDED/{print "        "$0}' | head -20
+        say "      -- SONAME / RUNPATH --"
+        readelf -d "$so" 2>/dev/null | grep -E 'SONAME|RPATH|RUNPATH' | head -10 | sed 's/^ */        /'
+        say "      -- dynsym 统计 --"
+        DS="$(readelf --dyn-syms -W "$so" 2>/dev/null || readelf -sW "$so" 2>/dev/null)"
+        say "        total dynsym lines : $(printf '%s\n' "$DS" | grep -c '^ *[0-9]' 2>/dev/null || echo 0)"
+        say "        GLOBAL DEFAULT FUNC: $(printf '%s\n' "$DS" | grep -c 'GLOBAL.*DEFAULT.*FUNC' 2>/dev/null || echo 0)"
+        say "        GLOBAL DEFAULT OBJ : $(printf '%s\n' "$DS" | grep -c 'GLOBAL.*DEFAULT.*OBJECT' 2>/dev/null || echo 0)"
+        say "      -- 导出符号样本（GLOBAL DEFAULT，≤20）--"
+        printf '%s\n' "$DS" | grep 'GLOBAL.*DEFAULT' | head -20 | sed 's/^ */        /'
+    done
+else
+    say "SKIP: readelf 不可用"
 fi
 
-# ================================================================ 收尾 =====
-sec "Z. 结束"
-say "OUTPUT_FILE: $MAIN"
-say "OUTPUT_SIZE: $(stat -c %s "$MAIN" 2>/dev/null || echo NOT_AVAILABLE) bytes"
-say "EXTRA_FILES:"
-ls -1 "$OUTDIR" 2>/dev/null | sed 's/^/  /'
-say ""
-say "NO_BINARY 声明：本脚本未复制、未压缩、未导出、未上传任何 .so / .ko / .bin。"
-say "未装载 / 未卸载 / 未替换任何模块或固件；未修改任何系统分区。"
-say ""
-say "结果不代表任何项目已闭合；判读请对照"
-say "  06_porting_design/STAGE4_DEVICE_COLLECTION_PLAN.md"
+# =============================================================== K 属性面 ====
+sec "K. 属性面 / EGL 路径 / 后端线索 / /dev/mali0 holders（U4-06 / U4-20 / U4-21）"
+sub "K-1 图形相关属性"
+for k in ro.hardware.egl ro.hardware.vulkan ro.opengles.version \
+         ro.hardware.gralloc ro.hardware.graphics composer.hardware \
+         ro.surface_flinger.max_frame_buffer_acquired_buffers \
+         debug.hwui.renderer debug.sf.hw ro.gfx.angle.supported \
+         persist.sys.sf.native_mode ro.vendor.gpu.egl.lib; do
+    v="$(getprop "$k" 2>/dev/null)"
+    say "  $k = ${v:-NOT_FOUND}"
+done
+sub "K-1b 全量 gpu / egl / vulkan / gralloc 属性（≤40 条）"
+getprop 2>/dev/null | grep -Ei 'gpu|egl|vulkan|gralloc|mali' | head -40 | sed 's/^/  /'
 
-exit 0
+sub "K-2 linker 配置中的 EGL / Vulkan 搜索路径（U4-06）"
+for f in /system/etc/ld.config.txt /vendor/etc/ld.config.txt \
+         /system/etc/ld.config.37.txt /linkerconfig/ld.config.txt; do
+    if [ -r "$f" ]; then
+        say "  FILE: $f"
+        grep -nEi 'egl|vulkan|mali|gpud|ged' "$f" 2>/dev/null | head -20 | sed 's/^/    /'
+    else
+        say "  NOT_FOUND: $f"
+    fi
+done
+
+sub "K-3 SurfaceFlinger 后端线索（U4-20；有界）"
+if need dumpsys "dumpsys"; then
+    dumpsys SurfaceFlinger 2>/dev/null | grep -Ei 'GLES|skiagl|vulkan|RenderEngine|GPU' | head -20 | sed 's/^/  /'
+fi
+
+sub "K-4 打开 /dev/mali0 的进程（U4-21）"
+if [ -r /dev/mali0 ]; then
+    say "  /dev/mali0 exists: yes"
+    if [ -d /proc ]; then
+        HITS=0
+        for pid in /proc/[0-9]*; do
+            if ls -l "$pid/fd" 2>/dev/null | grep -q 'mali0'; then
+                nm="$(cat "$pid/cmdline" 2>/dev/null | tr '\0' ' ' | cut -c1-48)"
+                [ -z "$nm" ] && nm="(kernel thread)"
+                say "    PID $(basename "$pid") : $nm"
+                HITS=$((HITS+1))
+                [ "$HITS" -ge 40 ] && { say "    ... (≥40，已截断)"; break; }
+            fi
+        done
+        say "  TOTAL_HOLDERS: $HITS"
+    fi
+else
+    say "  /dev/mali0 : ABSENT"
+fi
+
+sub "K-5 /dev/mali0 节点属性"
+ls -lZ /dev/mali0 2>/dev/null | sed 's/^/  /' || say "  NOT_AVAILABLE"
+
+}
+
+# =============================================================================
+# 输出通道：stdout 同时上屏 + 落盘。有 tee 用 tee，没有就内置实现。
+# =============================================================================
+tee_a() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        printf '%s\n' "$line"
+        printf '%s\n' "$line" >> "$MAIN"
+    done
+}
+
+if have tee; then
+    main 2>&1 | tee -a "$MAIN"
+else
+    main 2>&1 | tee_a
+fi
+
+# ---------------------------------------------------------------- 收尾 ------
+{
+    say ""
+    say "=================================================================="
+    say "## Z. 结束"
+    say "=================================================================="
+    say "OUTPUT_FILE: $MAIN"
+    say "OUTPUT_SIZE: $(fsize "$MAIN") bytes"
+    say "EXTRA_FILES:"
+    ls -1 "$OUTDIR" 2>/dev/null | grep -v "^$(basename "$MAIN")$" | sed 's/^/  /'
+    say ""
+    DL="$(grep -v -e '^=' -e '^## ' -e '^$' "$MAIN" 2>/dev/null | wc -l | tr -d ' ')"
+    say "SELFCHECK: 数据行数（不含标题与空行）＝ ${DL:-0}"
+    say "           若该值 < 60，说明多数命令未产出，请把本文件原样回传以便定位。"
+    say ""
+    say "NO_BINARY 声明：本脚本未复制、未压缩、未导出、未上传任何 .so / .ko / .bin。"
+    say "未装载 / 未卸载 / 未替换任何模块或固件；未修改任何系统分区。"
+    say ""
+    say "结果不代表任何项目已闭合；判读请对照"
+    say "  06_porting_design/STAGE4_DEVICE_COLLECTION_PLAN.md"
+} | tee_a
