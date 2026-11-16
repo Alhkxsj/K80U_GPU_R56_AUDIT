@@ -1,6 +1,19 @@
 #!/system/bin/sh
 # =============================================================================
-# collect_stage4_remainder.sh — v1.1  Stage 4 剩余缺口的最小化只读采集（合并版）
+# collect_stage4_remainder.sh — v1.2  Stage 4 剩余缺口的最小化只读采集（合并版）
+#
+# v1.2 修复（2026-11-16，第二轮真机回传后定位）——4 处「取到了数据但贴错标签」：
+#   [1] fsize() 补 stat -L：v1.1 用 stat -c 时，符号链接会取到链接自身长度而非
+#       目标文件长度，.so/.ko 尺寸读数可能是错的。
+#   [2] build-id 改为按 note 头动态定位：v1.1 固定 od -j 12，把 name 字段
+#       "GNU\0"（474e5500）当成 desc 前 4 字节，读数作废。本版解析
+#       namesz/descsz，按 4 字节对齐算出 desc 偏移再读 descsz 字节。
+#   [3] /proc/modules 不再把第 6 列当 taint：该列是加载地址（kptr_restrict
+#       下为 0）。taint 改读 /proc/sys/kernel/tainted，并补 deps 列。
+#   [4] readelf 符号计数正则纠正：列序是 Num Value Size Type Bind Vis Ndx Name，
+#       v1.1 的 GLOBAL.*DEFAULT.*FUNC 永远匹配不到，导出符号假 0。本版改用
+#       FUNC.*GLOBAL.*DEFAULT / OBJECT.*GLOBAL.*DEFAULT，并新增已定义符号
+#       （Ndx != UND）统计，供 libgpud / libgpud_sys 对照。
 #
 # v1.1 修复（2026-11-16）：
 #   v1.0 的 say() 会写文件，但 43 处原始命令管道只写 stdout，
